@@ -18,9 +18,16 @@ AI_BASE_URL=https://api.groq.com/openai/v1
 AI_API_KEY=
 AI_MODEL=openai/gpt-oss-20b
 API_FOOTBALL_KEY=
+
+SUPABASE_URL=
+SUPABASE_SECRET_KEY=
 ```
 
-Les clés sont lues uniquement côté serveur : ne jamais les préfixer par `NEXT_PUBLIC_`. Sur Vercel, ajouter ces quatre variables dans **Settings → Environment Variables**, puis redéployer.
+Les clés sont lues uniquement côté serveur : ne jamais les préfixer par `NEXT_PUBLIC_`. Sur Vercel, ajouter ces six variables dans **Settings → Environment Variables** (clés marquées **Sensitive**), puis redéployer.
+
+### Base de données Supabase
+
+Dans le **SQL Editor** de Supabase, exécuter `supabase/analyses.sql` : il crée la table `analyses` et active la Row Level Security (aucune règle : seule la clé secrète du serveur y accède). `SUPABASE_URL` est l'adresse racine du projet (`https://xxxx.supabase.co`, sans `/rest/v1`).
 
 ## Fonctionnement
 
@@ -33,6 +40,8 @@ Deux perspectives d'analyse :
 
 - **Rétrospective** : score, statistiques et suite de la saison sont fournis à l'IA.
 - **Avant le coup d'envoi** : le serveur retire lui-même le score, les statistiques et les matchs postérieurs. L'IA ne peut donc pas s'en servir.
+
+Chaque analyse est enregistrée dans Supabase (statut `201`), puis consultable sur `/analyses` (liste) et `/analyses/[id]` (détail). Ces pages lisent la base directement depuis des composants serveur ; `await connection()` les rend dynamiques (équivalent de `force-dynamic` avec `cacheComponents`), et `loading.tsx` fournit la limite `<Suspense>` exigée par Next.js 16.
 
 Les statistiques citées par l'IA sont réaffichées avec les valeurs d'API-Football ; une statistique inconnue est ignorée. Les questions complémentaires renvoient les derniers échanges au modèle comme contexte de conversation.
 

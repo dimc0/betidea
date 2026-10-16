@@ -8,6 +8,7 @@ import { construireDonneesAnalyse } from "@/lib/football/metier";
 import { genererAnalyse } from "@/lib/generer-analyse";
 import { ErreurIA } from "@/lib/ia";
 import { consommerOperation, LIMITE_ANALYSES_PAR_HEURE } from "@/lib/limite";
+import { creerClientSupabase } from "@/lib/supabase";
 
 export const maxDuration = 180;
 
@@ -125,11 +126,40 @@ export async function POST(request: Request) {
   }
 
   // 2. Analyse par le modèle d'IA
+  let analyse;
   try {
-    const analyse = await genererAnalyse(donneesAnalyse, question, historique);
-    return Response.json({ match: matchTrouve, perspective, question, analyse });
+    analyse = await genererAnalyse(donneesAnalyse, question, historique);
   } catch (erreur) {
     return reponseErreur(erreur);
+  }
+
+  // 3. Enregistrement de l'analyse dans la base de données
+  try {
+    const supabase = creerClientSupabase();
+    const { data, error } = await supabase
+      .from("analyses")
+      .insert({
+        competition_id: competition,
+        saison,
+        match_id: matchTrouve.id,
+        match: matchTrouve,
+        perspective,
+        question,
+        analyse,
+        modele: process.env.AI_MODEL || "openai/gpt-oss-20b",
+      })
+      .select("id, match, perspective, question, analyse, created_at")
+      .single();
+
+    if (error) throw error;
+
+    return Response.json(data, { status: 201 });
+  } catch (erreur) {
+    console.error("Erreur lors de l'enregistrement de l'analyse :", erreur);
+    return Response.json(
+      { erreur: "L'analyse a été générée mais n'a pas pu être enregistrée. Réessayez plus tard." },
+      { status: 500 }
+    );
   }
 }
 

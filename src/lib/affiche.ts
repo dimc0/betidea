@@ -144,3 +144,9 @@ export type ResultatAnalyse = {
   question: string;
   analyse: AnalyseStructuree;
 };
+
+// Une analyse enregistrée dans Supabase possède en plus un identifiant et une date.
+export type AnalyseEnregistree = ResultatAnalyse & {
+  id: string;
+  created_at: string;
+};
