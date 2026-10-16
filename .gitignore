@@ -32,10 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
-/public/chromium-pack.tar
 
 # typescript
 *.tsbuildinfo

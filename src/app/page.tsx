@@ -2,16 +2,31 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import type { BetclicMatch } from "@/lib/combine/betclic";
-import type { Combine } from "@/lib/combine/service";
+import type { Combine } from "@/lib/combine/metier";
 
 type ReponseApi = {
-  matchs: BetclicMatch[];
   nombreMatchs: number;
-  recupereLe: string;
-  source: string;
+  avertissements: string[];
+  clarification?: string;
   combine: Combine;
 };
+
+function formaterDate(iso: string): string {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "Horaire indisponible";
+  return new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "Europe/Paris",
+  }).format(date);
+}
+
+async function chargerDonneesCombine(): Promise<ReponseApi> {
+  const response = await fetch("/api/combine", { method: "GET", cache: "no-store" });
+  const resultat = (await response.json()) as ReponseApi & { erreur?: string };
+  if (!response.ok) throw new Error(resultat.erreur || "Impossible de charger le combiné.");
+  return resultat;
+}
 
 export default function Home() {
   const [donnees, setDonnees] = useState<ReponseApi | null>(null);
@@ -24,11 +39,9 @@ export default function Home() {
     setChargement(true);
     setErreur("");
     try {
-      const response = await fetch("/api/combine", { method: "GET", cache: "no-store" });
-      const resultat = (await response.json()) as ReponseApi & { erreur?: string };
-      if (!response.ok) throw new Error(resultat.erreur || "Impossible de charger le combiné.");
-      setDonnees(resultat);
+      setDonnees(await chargerDonneesCombine());
     } catch (error) {
+      setDonnees(null);
       setErreur(error instanceof Error ? error.message : "Erreur de chargement.");
     } finally {
       setChargement(false);
@@ -36,8 +49,25 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void chargerCombine();
-  }, [chargerCombine]);
+    let actif = true;
+    chargerDonneesCombine()
+      .then((resultat) => {
+        if (actif) setDonnees(resultat);
+      })
+      .catch((error: unknown) => {
+        if (actif) {
+          setDonnees(null);
+          setErreur(error instanceof Error ? error.message : "Erreur de chargement.");
+        }
+      })
+      .finally(() => {
+        if (actif) setChargement(false);
+      });
+
+    return () => {
+      actif = false;
+    };
+  }, []);
 
   async function envoyerMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,13 +79,17 @@ export default function Home() {
       const response = await fetch("/api/combine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, combine: donnees.combine }),
+        body: JSON.stringify({
+          message,
+          selectionIds: donnees.combine.paris.map((pari) => pari.id),
+        }),
       });
       const resultat = (await response.json()) as ReponseApi & { erreur?: string };
       if (!response.ok) throw new Error(resultat.erreur || "Impossible de modifier le combiné.");
       setDonnees(resultat);
       setMessage("");
     } catch (error) {
+      setDonnees(null);
       setErreur(error instanceof Error ? error.message : "Erreur de modification.");
     } finally {
       setEnvoi(false);
@@ -95,7 +129,7 @@ export default function Home() {
           <>
             <section className="mb-5 grid gap-3 sm:grid-cols-3">
               <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Matchs disponibles</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Matchs du jour disponibles</p>
                 <p className="mt-1 text-2xl font-semibold">{donnees.nombreMatchs}</p>
               </div>
               <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
@@ -107,6 +141,18 @@ export default function Home() {
                 <p className="mt-1 text-2xl font-semibold text-emerald-400">{donnees.combine.coteTotale.toFixed(2)}</p>
               </div>
             </section>
+
+            {donnees.avertissements.map((avertissement) => (
+              <p key={avertissement} role="status" className="mb-3 rounded-lg border border-amber-800 bg-amber-950/40 p-3 text-sm text-amber-200">
+                {avertissement}
+              </p>
+            ))}
+
+            {donnees.clarification && (
+              <p role="status" className="mb-4 rounded-lg border border-sky-800 bg-sky-950/40 p-3 text-sm text-sky-200">
+                {donnees.clarification}
+              </p>
+            )}
 
             <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-7">
               <div className="flex flex-col gap-2 border-b border-slate-800 pb-5 sm:flex-row sm:items-start sm:justify-between">
@@ -121,14 +167,14 @@ export default function Home() {
 
               <ol className="mt-5 space-y-3">
                 {donnees.combine.paris.map((pari, index) => (
-                  <li key={`${pari.match}-${pari.selection}`} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
+                  <li key={pari.id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
                     <div className="flex items-start gap-3">
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-800 text-sm font-semibold">{index + 1}</span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                           <div>
                             <p className="font-semibold">{pari.match}</p>
-                            <p className="mt-1 text-xs text-slate-500">{pari.competition} · {pari.heure || "Horaire non indiqué"}</p>
+                            <p className="mt-1 text-xs text-slate-500">{pari.competition} · {formaterDate(pari.coupEnvoi)}</p>
                           </div>
                           <span className="self-start rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 font-semibold text-emerald-300">
                             {pari.selection} · {pari.cote.toFixed(2)}
@@ -162,9 +208,9 @@ export default function Home() {
                 </div>
               </form>
             </section>
-
           </>
         )}
+
       </div>
     </main>
   );

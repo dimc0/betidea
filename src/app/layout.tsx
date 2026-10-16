@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Betidea — Combiné du jour",
-  description: "Combiné de football avec les cotes Betclic et Groq.",
+  description: "Analyses de football et combiné du jour à partir des données de The Odds API.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

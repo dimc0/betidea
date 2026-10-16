@@ -96,7 +96,7 @@ export default function AffichageAnalyse({
           </ul>
         ) : (
           <p className="mt-2 text-sm text-gray-600">
-            Aucune source vérifiable n'a été conservée pour cette analyse.
+            Aucune source vérifiable n&apos;a été conservée pour cette analyse.
           </p>
         )}
       </section>
