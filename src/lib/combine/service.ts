@@ -100,6 +100,7 @@ Chaque sélection a un identifiant stable, un match, un marché et un bookmaker 
 Ne crée et ne modifie jamais ces éléments. Ne renvoie que les identifiants présents dans le catalogue.
 Pour chaque pari choisi, écris une justification courte et prudente. Ne garantis aucun gain.
 Si la demande est ambiguë ou impossible avec les marchés présents, renvoie une clarification claire et une liste selections vide.
+Pour le combiné initial, choisis exactement le nombre demandé si le catalogue contient assez de matchs distincts ; ne demande pas de clarification quand les options fournies suffisent.
 Pour une modification, conserve les sélections courantes sauf si l'utilisateur demande de les retirer ou remplacer.
 La cote n'est jamais une preuve de probabilité et ne doit pas être reformulée comme une certitude.`,
       },
@@ -124,12 +125,13 @@ La cote n'est jamais une preuve de probabilité et ne doit pas être reformulée
 }
 
 async function genererPropositionInitialeCachee(
-  catalogueJson: string
+  catalogueJson: string,
+  nombreSelections: number
 ): Promise<ReponseIACombine> {
   "use cache";
   cacheLife({ stale: 60, revalidate: 300, expire: 900 });
   return demanderCombine(
-    "Crée un combiné de 3 sélections, une seule par match, à partir des options disponibles.",
+    `Crée un combiné de ${nombreSelections} sélections, une seule par match, à partir des options disponibles.`,
     JSON.parse(catalogueJson)
   );
 }
@@ -147,10 +149,14 @@ export async function genererCombineInitial(): Promise<{
   }
 
   const reponse = await genererPropositionInitialeCachee(
-    JSON.stringify(donneesCompactesPourIA(catalogueIA))
+    JSON.stringify(donneesCompactesPourIA(catalogueIA)),
+    Math.min(3, nombreMatchsDistincts)
   );
-  if (reponse.clarification) {
-    throw new ErreurIA(reponse.clarification, 422);
+  if (reponse.selections.length === 0) {
+    throw new ErreurIA(
+      reponse.clarification || "L'IA n'a pas proposé de sélections exploitables. Réessaie dans un instant.",
+      422
+    );
   }
 
   return {
