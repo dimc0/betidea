@@ -1,6 +1,8 @@
 import { genererCombineInitial, modifierCombine } from "@/lib/combine/service";
 import { ErreurIA } from "@/lib/ia";
 
+export const maxDuration = 180;
+
 function statutErreur(error: unknown, statutParDefaut: number): number {
   if (error instanceof ErreurIA && [413, 429, 500, 502, 504].includes(error.status)) {
     return error.status;

@@ -1,4 +1,5 @@
-import puppeteer from "puppeteer";
+import chromium from "@sparticuz/chromium";
+import type { Browser } from "puppeteer-core";
 
 export type BetclicOdds = {
   selection: string;
@@ -29,13 +30,23 @@ const URL_BETCLIC =
 const ATTENTE_CHARGEMENT_MS = 7000;
 
 export async function recupererMatchsBetclic(): Promise<BetclicSnapshot> {
-  let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
+  let browser: Browser | undefined;
 
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
+    if (process.env.VERCEL === "1") {
+      const { default: puppeteer } = await import("puppeteer-core");
+      browser = await puppeteer.launch({
+        args: chromium.args,
+        executablePath: await chromium.executablePath(),
+        headless: "shell",
+      });
+    } else {
+      const { default: puppeteer } = await import("puppeteer");
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      });
+    }
 
     const page = await browser.newPage();
     await page.setViewport({ width: 1365, height: 900 });
