@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import type { FormEvent } from "react";
+import Link from "next/link";
 import AffichageAnalyse from "@/components/AffichageAnalyse";
-import { LIMITES, type Affiche, type Perspective, type ResultatAnalyse } from "@/lib/affiche";
+import { LIMITES, type Affiche, type AnalyseEnregistree, type Perspective } from "@/lib/affiche";
 
 const SUGGESTIONS = [
   "Analyse ce match et explique le résultat.",
@@ -13,12 +14,13 @@ const SUGGESTIONS = [
   "Comment ces deux équipes ont-elles évolué au cours des derniers matchs ?",
 ];
 
-function estResultatAnalyse(valeur: unknown): valeur is ResultatAnalyse {
+function estAnalyseEnregistree(valeur: unknown): valeur is AnalyseEnregistree {
   if (typeof valeur !== "object" || valeur === null) return false;
   const donnees = valeur as Record<string, unknown>;
   const analyse = donnees.analyse as Record<string, unknown> | null;
 
   return (
+    typeof donnees.id === "string" &&
     typeof donnees.question === "string" &&
     typeof donnees.match === "object" &&
     typeof analyse === "object" &&
@@ -45,7 +47,7 @@ export default function FormulaireAnalyse({
   const [question, setQuestion] = useState("");
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState("");
-  const [echanges, setEchanges] = useState<ResultatAnalyse[]>([]);
+  const [echanges, setEchanges] = useState<AnalyseEnregistree[]>([]);
 
   function changerPerspective(nouvelle: Perspective) {
     // Une conversation rétrospective contient le résultat : on ne la réutilise pas
@@ -95,7 +97,7 @@ export default function FormulaireAnalyse({
         return;
       }
 
-      if (!estResultatAnalyse(donnees)) {
+      if (!estAnalyseEnregistree(donnees)) {
         setErreur("La réponse reçue du serveur n'a pas le format attendu.");
         return;
       }
@@ -180,8 +182,16 @@ export default function FormulaireAnalyse({
       )}
 
       <div className="mt-5 flex flex-col gap-4">
-        {echanges.map((echange, index) => (
-          <AffichageAnalyse key={index} resultat={echange} />
+        {echanges.map((echange) => (
+          <div key={echange.id}>
+            <p className="mb-2 text-xs text-emerald-300">
+              Analyse enregistrée.{" "}
+              <Link href={`/analyses/${echange.id}`} className="font-medium underline">
+                Retrouver cette analyse
+              </Link>
+            </p>
+            <AffichageAnalyse resultat={echange} />
+          </div>
         ))}
       </div>
 
