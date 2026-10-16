@@ -37,10 +37,30 @@ async function obtenirCheminChromium(): Promise<string> {
     throw new Error("VERCEL_URL est manquant pour charger Chromium.");
   }
 
-  chromiumPathPromise ??= import("@sparticuz/chromium-min")
-    .then(({ default: chromium }) =>
-      chromium.executablePath(`https://${host}/chromium-pack.tar`)
-    )
+  const archiveUrl = new URL("/chromium-pack.tar", `https://${host}`);
+  const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  if (bypassSecret) {
+    archiveUrl.searchParams.set("x-vercel-protection-bypass", bypassSecret);
+  }
+
+  chromiumPathPromise ??= fetch(archiveUrl, { method: "HEAD" })
+    .then((response) => {
+      const contentType = response.headers.get("content-type") ?? "";
+      const matchedPath = response.headers.get("x-matched-path") ?? "";
+
+      if (matchedPath === "/login" || contentType.includes("text/html")) {
+        throw new Error(
+          "Vercel protège chromium-pack.tar par une page de connexion. Active Protection Bypass for Automation dans les paramètres du projet, puis redéploie."
+        );
+      }
+      if (!response.ok) {
+        throw new Error(
+          `Vercel ne peut pas servir chromium-pack.tar (HTTP ${response.status}). Vérifie que le postinstall a généré le fichier public/chromium-pack.tar.`
+        );
+      }
+    })
+    .then(() => import("@sparticuz/chromium-min"))
+    .then(({ default: chromium }) => chromium.executablePath(archiveUrl.toString()))
     .catch((erreur: unknown) => {
       chromiumPathPromise = undefined;
       throw erreur;
