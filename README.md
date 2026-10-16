@@ -1,6 +1,8 @@
 # Betidea
 
-Application Next.js serverless d'analyse de football et de création d'un combiné du jour.
+Application Next.js serverless d'**analyse historique du football**. L'utilisateur choisit une compétition et une saison passée, parcourt les matchs terminés, consulte le score et les statistiques fournis par [API-Football](https://www.api-football.com/), puis demande à une IA d'analyser le match en langage naturel.
+
+Betidea ne récupère ni matchs du jour, ni cotes, et ne propose aucun pari.
 
 ## Lancer le projet
 
@@ -15,25 +17,32 @@ Copier `.env.example` vers `.env.local`, puis renseigner les clés uniquement da
 AI_BASE_URL=https://api.groq.com/openai/v1
 AI_API_KEY=
 AI_MODEL=openai/gpt-oss-20b
-THE_ODDS_API_KEY=
+API_FOOTBALL_KEY=
 ```
 
-Les clés sont utilisées côté serveur. Ne pas les préfixer par `NEXT_PUBLIC_`.
-Sur Vercel, ajouter `THE_ODDS_API_KEY`, `AI_API_KEY`, `AI_BASE_URL` et `AI_MODEL` dans **Project Settings → Environment Variables**, sélectionner les environnements concernés, puis redéployer.
+Les clés sont lues uniquement côté serveur : ne jamais les préfixer par `NEXT_PUBLIC_`. Sur Vercel, ajouter ces quatre variables dans **Settings → Environment Variables**, puis redéployer.
 
-## Combiné et cotes
+## Fonctionnement
 
-`GET /api/combine` récupère les matchs du jour (fuseau `Europe/Paris`) et les données de The Odds API, puis demande au modèle un combiné de 2 à 4 sélections. Trois sélections sont demandées par défaut. `POST /api/combine` prend une demande de 500 caractères maximum et les identifiants des sélections courantes ; le serveur recharge les cotes, valide chaque identifiant et recalcule la cote totale.
+1. `GET /api/competitions` : Ligue 1, Premier League, Bundesliga, Serie A, La Liga et Ligue des champions, avec leurs **saisons terminées** lues dans `/leagues` (aucune saison n'est écrite dans le code).
+2. `GET /api/matchs?competition=61&saison=2023` : matchs terminés (`FT`, `AET`, `PEN`) de la saison, en **une seule requête** `/fixtures`.
+3. `GET /api/statistiques?competition=61&saison=2023&match=…` : statistiques `/fixtures/statistics` associées à chaque équipe par son identifiant. Aucune requête n'est envoyée si API-Football n'annonce pas de statistiques pour la saison.
+4. `POST /api/analyses` : le serveur retrouve le match, construit un objet de données typé, puis demande au modèle une analyse structurée (schéma JSON validé côté serveur, deux tentatives).
 
-Le MVP interroge six compétitions de football : Ligue 1, Premier League, Bundesliga, Serie A, La Liga et Ligue des champions. Pour chaque événement, il conserve les bookmakers et marchés effectivement renvoyés pour la région Europe. Chaque sélection affiche son bookmaker, son marché et la date de mise à jour. Les cotes âgées de plus de 30 minutes sont écartées. L'IA ne reçoit que ces sélections réelles ; le serveur revérifie leurs identifiants et recalcule la cote totale.
+Deux perspectives d'analyse :
 
-Le cache Next.js est partagé entre les visiteurs et conserve chaque réponse de compétition jusqu'à 5 minutes avant revalidation. Le coût dépend des événements et marchés effectivement renvoyés par The Odds API ; surveille le quota dans le tableau de bord du fournisseur avant une utilisation fréquente.
+- **Rétrospective** : score, statistiques et suite de la saison sont fournis à l'IA.
+- **Avant le coup d'envoi** : le serveur retire lui-même le score, les statistiques et les matchs postérieurs. L'IA ne peut donc pas s'en servir.
 
-Les modifications de combiné sont limitées à 5 requêtes par heure et par adresse réseau. Le dépôt n'a ni comptes utilisateurs ni stockage partagé (Redis/Upstash) : cette limite en mémoire est indicative sur Vercel et peut être réinitialisée lorsqu'une instance redémarre ou mise à l'échelle. Une limite stricte par utilisateur nécessiterait une authentification et un stockage partagé.
+Les statistiques citées par l'IA sont réaffichées avec les valeurs d'API-Football ; une statistique inconnue est ignorée. Les questions complémentaires renvoient les derniers échanges au modèle comme contexte de conversation.
 
-## Analyse de match
+## Quotas et cache
 
-`POST /api/analyses` utilise le client Groq partagé dans `src/lib/ia.ts`. Ce flux est conservé indépendamment du combiné.
+Les réponses d'API-Football sont mises en cache avec `"use cache"` : 1 jour pour les compétitions, 1 semaine pour les matchs et statistiques d'une saison passée. Une erreur (quota, saison refusée par l'offre…) n'est conservée que quelques secondes. Le cache est propre à chaque instance serverless.
+
+Les analyses IA sont limitées à 20 par heure et par adresse réseau. Cette limite est gardée en mémoire : elle est indicative sur Vercel, puisqu'une fonction serverless est sans état.
+
+L'offre gratuite d'API-Football limite les saisons accessibles : si une saison est refusée, le message renvoyé par l'API (qui indique les saisons autorisées) est affiché tel quel.
 
 ## Vérifications
 
@@ -44,4 +53,6 @@ npm run lint
 npm run build
 ```
 
-Le dépôt ne contient actuellement pas d'authentification ni de stockage utilisateur. Les sélections privées ne sont donc pas enregistrées côté serveur ; le serveur reconstruit chaque sélection à partir du catalogue actuel avant de la modifier.
+Les tests (`tests/football.test.mjs`) portent sur la logique pure et n'appellent ni API-Football ni le modèle d'IA.
+
+Voir aussi `docs/api-football.md` et `docs/architecture.md`.

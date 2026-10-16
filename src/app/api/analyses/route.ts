@@ -1,11 +1,39 @@
-
-import type { Affiche } from "@/lib/affiche";
+import { LIMITES, type EchangeQuestion, type Perspective, type StatistiquesMatch } from "@/lib/affiche";
+import {
+  ErreurFootball,
+  recupererStatistiquesMatch,
+  trouverMatch,
+} from "@/lib/football/api-football";
+import { construireDonneesAnalyse } from "@/lib/football/metier";
 import { genererAnalyse } from "@/lib/generer-analyse";
 import { ErreurIA } from "@/lib/ia";
+import { consommerOperation, LIMITE_ANALYSES_PAR_HEURE } from "@/lib/limite";
+
+export const maxDuration = 180;
+
+function lireHistorique(valeur: unknown): EchangeQuestion[] | null {
+  if (valeur === undefined) return [];
+  if (!Array.isArray(valeur) || valeur.length > LIMITES.echangesMax) return null;
+
+  const historique: EchangeQuestion[] = [];
+  for (const element of valeur) {
+    if (
+      typeof element !== "object" ||
+      element === null ||
+      typeof element.question !== "string" ||
+      typeof element.reponse !== "string" ||
+      element.question.length > LIMITES.questionMax ||
+      element.reponse.length > LIMITES.reponseMax
+    ) {
+      return null;
+    }
+    historique.push({ question: element.question, reponse: element.reponse });
+  }
+  return historique;
+}
 
 export async function POST(request: Request) {
   let body: unknown;
-
   try {
     body = await request.json();
   } catch {
@@ -15,175 +43,131 @@ export async function POST(request: Request) {
     );
   }
 
-  if (
-    typeof body !== "object" ||
-    body === null
-  ) {
-    return Response.json(
-      { erreur: "Les données envoyées sont invalides." },
-      { status: 400 }
-    );
+  if (typeof body !== "object" || body === null) {
+    return Response.json({ erreur: "Les données envoyées sont invalides." }, { status: 400 });
   }
 
   const donnees = body as Record<string, unknown>;
-
-  const sport = donnees.sport;
-  const equipe_dom =
-    typeof donnees.equipe_dom === "string"
-      ? donnees.equipe_dom.trim()
-      : "";
-  const equipe_ext =
-    typeof donnees.equipe_ext === "string"
-      ? donnees.equipe_ext.trim()
-      : "";
-  const competition =
-    typeof donnees.competition === "string"
-      ? donnees.competition.trim()
-      : "";
-  const date_match =
-    typeof donnees.date_match === "string"
-      ? donnees.date_match.trim()
-      : "";
-
-  if (sport !== "football") {
-    return Response.json(
-      { erreur: "Seul le football est pris en charge." },
-      { status: 400 }
-    );
-  }
+  const question = typeof donnees.question === "string" ? donnees.question.trim() : "";
+  const perspective = donnees.perspective;
+  const historique = lireHistorique(donnees.historique);
+  const { competition, saison, match } = donnees;
 
   if (
-    !equipe_dom ||
-    !equipe_ext ||
-    !competition ||
-    !date_match
+    !Number.isInteger(competition) ||
+    !Number.isInteger(saison) ||
+    !Number.isInteger(match)
   ) {
     return Response.json(
-      { erreur: "Tous les champs obligatoires doivent être remplis." },
+      { erreur: "La compétition, la saison et le match sont obligatoires." },
       { status: 400 }
     );
   }
 
-  if (
-    equipe_dom.length > 150 ||
-    equipe_ext.length > 150 ||
-    competition.length > 150
-  ) {
+  if (!question || question.length > LIMITES.questionMax) {
     return Response.json(
-      {
-        erreur:
-          "Les participants et la compétition sont limités à 150 caractères.",
-      },
+      { erreur: `La question est obligatoire (${LIMITES.questionMax} caractères maximum).` },
       { status: 400 }
     );
   }
 
-  if (
-    donnees.contexte !== undefined &&
-    typeof donnees.contexte !== "string"
-  ) {
+  if (perspective !== "retrospective" && perspective !== "avant_match") {
+    return Response.json({ erreur: "La perspective d'analyse est invalide." }, { status: 400 });
+  }
+
+  if (!historique) {
     return Response.json(
-      { erreur: "Le contexte doit être du texte." },
+      { erreur: `L'historique est limité à ${LIMITES.echangesMax} échanges.` },
       { status: 400 }
     );
   }
 
-  const contexte =
-    typeof donnees.contexte === "string"
-      ? donnees.contexte.trim()
-      : "";
-
-  if (contexte.length > 2000) {
+  const delaiRestant = consommerOperation(request);
+  if (delaiRestant !== null) {
     return Response.json(
-      { erreur: "Le contexte est limité à 2000 caractères." },
-      { status: 400 }
+      { erreur: `Limite atteinte : ${LIMITE_ANALYSES_PAR_HEURE} analyses par heure.` },
+      { status: 429, headers: { "Retry-After": String(delaiRestant) } }
     );
   }
 
-  const date = new Date(`${date_match}T00:00:00.000Z`);
-
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(date_match) ||
-    Number.isNaN(date.getTime()) ||
-    date.toISOString().slice(0, 10) !== date_match
-  ) {
-    return Response.json(
-      { erreur: "La date de la rencontre est invalide." },
-      { status: 400 }
-    );
-  }
-
-  const affiche: Affiche = {
-    sport,
-    equipe_dom,
-    equipe_ext,
-    competition,
-    date_match,
-    contexte,
-  };
-
+  // 1. Données du match : uniquement depuis API-Football, jamais depuis le navigateur
+  let donneesAnalyse;
+  let matchTrouve;
   try {
-    const analyse = await genererAnalyse(affiche);
+    const resultat = await trouverMatch(competition as number, saison as number, match as number);
+    matchTrouve = resultat.match;
 
-    return Response.json({
-      message: "Analyse générée.",
-      affiche,
-      analyse: {
-        statut: "prete",
-        ...analyse,
-      },
-    });
-  } catch (erreur) {
-    if (
-      erreur instanceof ErreurIA &&
-      erreur.status === 429
-    ) {
-      return Response.json(
-        {
-          erreur:
-            "Le quota du service d'IA est atteint. Réessayez plus tard.",
-        },
-        { status: 429 }
-      );
-    }
-
-    if (
-      erreur instanceof ErreurIA &&
-      erreur.status === 413
-    ) {
-      return Response.json(
-        { erreur: "La demande est trop volumineuse." },
-        { status: 413 }
-      );
-    }
-
-    if (
-      erreur instanceof Error &&
-      erreur.name === "TimeoutError"
-    ) {
-      return Response.json(
-        {
-          erreur:
-            "Le service d'IA met trop de temps à répondre. Réessayez plus tard.",
-        },
-        { status: 504 }
-      );
-    }
-
-    console.error("Échec de l'analyse Betidea.");
-
-    return Response.json(
-      {
-        erreur:
-          "La génération de l'analyse a échoué. Réessayez plus tard.",
-      },
-      {
-        status:
-          erreur instanceof ErreurIA &&
-          erreur.status === 500
-            ? 500
-            : 502,
+    let statistiques: StatistiquesMatch | null = null;
+    if (perspective === "retrospective") {
+      try {
+        statistiques = await recupererStatistiquesMatch(matchTrouve);
+      } catch (erreur) {
+        // Sans statistiques, l'analyse reste possible avec le score et les bilans.
+        console.warn("Statistiques indisponibles pour l'analyse :", erreur);
       }
+    }
+
+    donneesAnalyse = construireDonneesAnalyse(
+      matchTrouve,
+      resultat.matchsSaison,
+      statistiques,
+      perspective as Perspective
+    );
+  } catch (erreur) {
+    if (erreur instanceof ErreurFootball) {
+      return Response.json({ erreur: erreur.message }, { status: erreur.status });
+    }
+    console.error(erreur);
+    return Response.json(
+      { erreur: "Les données du match n'ont pas pu être récupérées. Réessayez plus tard." },
+      { status: 502 }
     );
   }
+
+  // 2. Analyse par le modèle d'IA
+  try {
+    const analyse = await genererAnalyse(donneesAnalyse, question, historique);
+    return Response.json({ match: matchTrouve, perspective, question, analyse });
+  } catch (erreur) {
+    return reponseErreur(erreur);
+  }
+}
+
+function reponseErreur(erreur: unknown) {
+  if (erreur instanceof ErreurIA && erreur.status === 429) {
+    return Response.json(
+      { erreur: "Le quota du service d'IA est atteint. Réessayez dans quelques instants." },
+      { status: 429 }
+    );
+  }
+
+  if (erreur instanceof ErreurIA && erreur.status === 413) {
+    return Response.json(
+      { erreur: "Les données du match sont trop volumineuses pour le service d'IA." },
+      { status: 413 }
+    );
+  }
+
+  if (
+    (erreur instanceof ErreurIA && erreur.status === 504) ||
+    (erreur instanceof Error && erreur.name === "TimeoutError")
+  ) {
+    return Response.json(
+      { erreur: "Le service d'IA met trop de temps à répondre. Réessayez plus tard." },
+      { status: 504 }
+    );
+  }
+
+  if (erreur instanceof ErreurIA && erreur.status === 502) {
+    return Response.json(
+      { erreur: "Le modèle a renvoyé une analyse mal formée, elle n'a pas été affichée. Réessayez." },
+      { status: 502 }
+    );
+  }
+
+  console.error(erreur);
+  return Response.json(
+    { erreur: "La génération de l'analyse a échoué. Réessayez plus tard." },
+    { status: 502 }
+  );
 }
