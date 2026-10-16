@@ -23,6 +23,8 @@ Projet de Bachelor Développement Web : application Next.js 16 serverless d'**an
 
 - `cacheComponents: true` : le cache passe par `"use cache"` + `cacheLife`. Une erreur levée dans une fonction `"use cache"` perd son message en production : renvoyer `{ ok: false, erreur, status }` et utiliser `cacheLife("seconds")` pour les erreurs (voir `src/lib/football/api-football.ts`).
 - `await connection()` doit rester hors d'un `try/catch` dans un Route Handler.
+- Pages qui lisent Supabase : `await connection()` à la place de `export const dynamic = "force-dynamic"` (incompatible avec `cacheComponents`), et un `loading.tsx` dans le dossier comme limite `<Suspense>` (sinon `next build` échoue).
+- Table Supabase : `supabase/analyses.sql` (RLS activée sans règle, accès uniquement via `SUPABASE_SECRET_KEY` dans `src/lib/supabase.ts`).
 - API-Football répond en HTTP 200 même en erreur : lire le champ `errors` (`lireErreurApi`).
 - Lire `node_modules/next/dist/docs/` avant d'utiliser une API Next.js.
 

@@ -7,10 +7,14 @@ Navigateur (composants client)
    │  fetch
    ▼
 Route Handlers (src/app/api/*, fonctions serverless)
-   │                     │
-   ▼                     ▼
-API-Football         Modèle d'IA (Groq, compatible OpenAI)
+   │                     │                         │
+   ▼                     ▼                         ▼
+API-Football         Modèle d'IA (Groq)        Supabase (table analyses)
+                                                   ▲
+                     Pages serveur /analyses ──────┘
 ```
+
+`POST /api/analyses` enchaîne trois services : API-Football (données), le modèle (analyse), Supabase (enregistrement, statut 201). Comme au TD1 (partie 7.4), une panne du modèle et une panne de la base renvoient des messages différents.
 
 ## Fichiers
 
@@ -22,6 +26,11 @@ API-Football         Modèle d'IA (Groq, compatible OpenAI)
 | `src/lib/football/api-football.ts` | Appels réseau, clé `API_FOOTBALL_KEY`, cache `"use cache"` | serveur (`server-only`) |
 | `src/lib/ia.ts` | Client du modèle (`appelerModele`, `ErreurIA`) | serveur |
 | `src/lib/generer-analyse.ts` | Consigne, schéma JSON, validation, nouvelle tentative | serveur |
+| `src/lib/supabase.ts` | Client Supabase avec la clé secrète | serveur (`server-only`) |
+| `supabase/analyses.sql` | Création de la table `analyses` + RLS | Supabase |
+| `src/app/analyses/page.tsx` | Liste des analyses enregistrées | serveur |
+| `src/app/analyses/[id]/page.tsx` | Détail d'une analyse | serveur |
+| `src/app/analyses/loading.tsx` | Chargement + limite `<Suspense>` | serveur |
 | `src/lib/limite.ts` | Limite indicative d'analyses par adresse | serveur |
 | `src/app/api/competitions/route.ts` | `GET` compétitions et saisons passées | serveur |
 | `src/app/api/matchs/route.ts` | `GET` matchs terminés d'une saison | serveur |
