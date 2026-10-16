@@ -2,10 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  serverExternalPackages: ["@sparticuz/chromium"],
-  outputFileTracingIncludes: {
-    "/api/combine": ["./node_modules/@sparticuz/chromium/bin/**/*"],
-  },
+  serverExternalPackages: ["@sparticuz/chromium-min"],
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

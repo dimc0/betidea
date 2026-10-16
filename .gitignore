@@ -35,6 +35,7 @@ yarn-error.log*
 
 # vercel
 .vercel
+/public/chromium-pack.tar
 
 # typescript
 *.tsbuildinfo

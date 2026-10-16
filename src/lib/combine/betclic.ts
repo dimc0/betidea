@@ -1,4 +1,3 @@
-import chromium from "@sparticuz/chromium";
 import type { Browser } from "puppeteer-core";
 
 export type BetclicOdds = {
@@ -27,7 +26,28 @@ export type BetclicSnapshot = {
 
 const URL_BETCLIC =
   "https://www.betclic.fr/football-sfootball/top-football-europeen-p0";
-const ATTENTE_CHARGEMENT_MS = 7000;
+const ATTENTE_CHARGEMENT_MS = 20000;
+
+let chromiumPathPromise: Promise<string> | undefined;
+
+async function obtenirCheminChromium(): Promise<string> {
+  const host = process.env.VERCEL_URL;
+
+  if (!host) {
+    throw new Error("VERCEL_URL est manquant pour charger Chromium.");
+  }
+
+  chromiumPathPromise ??= import("@sparticuz/chromium-min")
+    .then(({ default: chromium }) =>
+      chromium.executablePath(`https://${host}/chromium-pack.tar`)
+    )
+    .catch((erreur: unknown) => {
+      chromiumPathPromise = undefined;
+      throw erreur;
+    });
+
+  return chromiumPathPromise;
+}
 
 export async function recupererMatchsBetclic(): Promise<BetclicSnapshot> {
   let browser: Browser | undefined;
@@ -35,9 +55,10 @@ export async function recupererMatchsBetclic(): Promise<BetclicSnapshot> {
   try {
     if (process.env.VERCEL === "1") {
       const { default: puppeteer } = await import("puppeteer-core");
+      const { default: chromium } = await import("@sparticuz/chromium-min");
       browser = await puppeteer.launch({
         args: chromium.args,
-        executablePath: await chromium.executablePath(),
+        executablePath: await obtenirCheminChromium(),
         headless: "shell",
       });
     } else {
@@ -50,11 +71,33 @@ export async function recupererMatchsBetclic(): Promise<BetclicSnapshot> {
 
     const page = await browser.newPage();
     await page.setViewport({ width: 1365, height: 900 });
+    await page.setUserAgent((await page.browser().userAgent()).replace("HeadlessChrome", "Chrome"));
+    await page.setExtraHTTPHeaders({ "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8" });
     await page.goto(URL_BETCLIC, {
       waitUntil: "domcontentloaded",
       timeout: 60000,
     });
-    await new Promise((resolve) => setTimeout(resolve, ATTENTE_CHARGEMENT_MS));
+    const cartesChargees = await page.waitForFunction(
+      () => document.querySelectorAll(".groupEvents_card").length > 0,
+      { timeout: ATTENTE_CHARGEMENT_MS }
+    ).then(() => true).catch(() => false);
+
+    if (!cartesChargees) {
+      const diagnostic = await page.evaluate(() => ({
+        titre: document.title,
+        url: window.location.href,
+        extrait: document.body.innerText.slice(0, 300),
+      }));
+      console.error("Betclic n'a affiché aucune carte de match.", diagnostic);
+      throw new Error(
+        `Betclic n'a affiché aucun match après ${ATTENTE_CHARGEMENT_MS / 1000} secondes (${diagnostic.titre || diagnostic.url}).`
+      );
+    }
+
+    await page.waitForFunction(
+      () => document.querySelectorAll(".groupEvents_card .market_odds button").length > 0,
+      { timeout: 10000 }
+    ).catch(() => undefined);
 
     const recuperation = new Date().toISOString();
     const extraits = await page.evaluate((dateRecuperation) => {
@@ -74,12 +117,14 @@ export async function recupererMatchsBetclic(): Promise<BetclicSnapshot> {
           const heure = txt(carte.querySelector<HTMLElement>(".scoreboard_hour")?.innerText);
           const cotes = Array.from(carte.querySelectorAll<HTMLButtonElement>(".market_odds button"))
             .map((bouton) => {
+              const morceaux = txt(bouton.innerText).split(" ");
+              const coteParBouton = morceaux[morceaux.length - 1] ?? "";
               const selection = txt(
                 bouton.querySelector<HTMLElement>(".btn_label.is-top")?.innerText
-              );
+              ) || morceaux.slice(0, -1).join(" ");
               const coteTexte = txt(
                 bouton.querySelector<HTMLElement>("bcdk-bet-button-odds-animated")?.innerText
-              );
+              ) || coteParBouton;
               const cote = Number(coteTexte.replace(",", "."));
               if (!selection || !coteTexte || !Number.isFinite(cote) || cote <= 1) {
                 return null;
@@ -114,8 +159,14 @@ export async function recupererMatchsBetclic(): Promise<BetclicSnapshot> {
     );
 
     if (uniques.length === 0) {
+      const diagnostic = await page.evaluate(() => ({
+        titre: document.title,
+        nombreCartes: document.querySelectorAll(".groupEvents_card").length,
+        nombreBoutonsCotes: document.querySelectorAll(".groupEvents_card .market_odds button").length,
+      }));
+      console.error("Aucun match Betclic exploitable n'a été extrait.", diagnostic);
       throw new Error(
-        "Betclic a été chargé, mais aucun match avec équipes et cotes n'a été extrait."
+        `Aucun match exploitable trouvé (cartes : ${diagnostic.nombreCartes}, boutons de cotes : ${diagnostic.nombreBoutonsCotes}).`
       );
     }
 
