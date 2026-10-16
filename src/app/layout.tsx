@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Betidea — Combiné du jour",
-  description: "Analyses de football et combiné du jour à partir des données de The Odds API.",
+  title: "Betidea — Analyse historique du football",
+  description: "Matchs terminés des saisons passées, statistiques API-Football et analyses par l'IA.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

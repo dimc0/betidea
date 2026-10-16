@@ -1,216 +1,23 @@
-"use client";
-
-import { useCallback, useEffect, useState } from "react";
-import type { FormEvent } from "react";
-import type { Combine } from "@/lib/combine/metier";
-
-type ReponseApi = {
-  nombreMatchs: number;
-  avertissements: string[];
-  clarification?: string;
-  combine: Combine;
-};
-
-function formaterDate(iso: string): string {
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return "Horaire indisponible";
-  return new Intl.DateTimeFormat("fr-FR", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone: "Europe/Paris",
-  }).format(date);
-}
-
-async function chargerDonneesCombine(): Promise<ReponseApi> {
-  const response = await fetch("/api/combine", { method: "GET", cache: "no-store" });
-  const resultat = (await response.json()) as ReponseApi & { erreur?: string };
-  if (!response.ok) throw new Error(resultat.erreur || "Impossible de charger le combiné.");
-  return resultat;
-}
+import ExplorateurMatchs from "@/components/ExplorateurMatchs";
 
 export default function Home() {
-  const [donnees, setDonnees] = useState<ReponseApi | null>(null);
-  const [message, setMessage] = useState("");
-  const [chargement, setChargement] = useState(true);
-  const [envoi, setEnvoi] = useState(false);
-  const [erreur, setErreur] = useState("");
-
-  const chargerCombine = useCallback(async () => {
-    setChargement(true);
-    setErreur("");
-    try {
-      setDonnees(await chargerDonneesCombine());
-    } catch (error) {
-      setDonnees(null);
-      setErreur(error instanceof Error ? error.message : "Erreur de chargement.");
-    } finally {
-      setChargement(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    let actif = true;
-    chargerDonneesCombine()
-      .then((resultat) => {
-        if (actif) setDonnees(resultat);
-      })
-      .catch((error: unknown) => {
-        if (actif) {
-          setDonnees(null);
-          setErreur(error instanceof Error ? error.message : "Erreur de chargement.");
-        }
-      })
-      .finally(() => {
-        if (actif) setChargement(false);
-      });
-
-    return () => {
-      actif = false;
-    };
-  }, []);
-
-  async function envoyerMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!donnees || !message.trim() || envoi) return;
-
-    setEnvoi(true);
-    setErreur("");
-    try {
-      const response = await fetch("/api/combine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message,
-          selectionIds: donnees.combine.paris.map((pari) => pari.id),
-        }),
-      });
-      const resultat = (await response.json()) as ReponseApi & { erreur?: string };
-      if (!response.ok) throw new Error(resultat.erreur || "Impossible de modifier le combiné.");
-      setDonnees(resultat);
-      setMessage("");
-    } catch (error) {
-      setDonnees(null);
-      setErreur(error instanceof Error ? error.message : "Erreur de modification.");
-    } finally {
-      setEnvoi(false);
-    }
-  }
-
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100 sm:px-8">
-      <div className="mx-auto max-w-5xl">
-        <header className="mb-8 flex flex-col gap-3 border-b border-slate-800 pb-6 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-emerald-400">Betidea · Football</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Ton combiné du jour</h1>
-          </div>
-          <button
-            onClick={() => void chargerCombine()}
-            disabled={chargement || envoi}
-            className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium transition hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {chargement ? "Chargement…" : "Actualiser les matchs et le combiné"}
-          </button>
+      <div className="mx-auto max-w-6xl">
+        <header className="border-b border-slate-800 pb-6">
+          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-emerald-400">
+            Betidea · Football
+          </p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+            Analyse historique du football
+          </h1>
+          <p className="mt-2 text-slate-400">
+            Explore les matchs terminés des saisons passées, consulte leurs statistiques réelles et
+            demande à l&apos;IA de les analyser.
+          </p>
         </header>
 
-        {erreur && (
-          <div role="alert" className="mb-6 rounded-xl border border-rose-900 bg-rose-950/60 p-4 text-sm text-rose-200">
-            {erreur}
-          </div>
-        )}
-
-        {chargement && !donnees && (
-          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-8">
-            <div className="animate-pulse text-slate-300">Récupération des matchs puis génération du combiné…</div>
-          </section>
-        )}
-
-        {donnees && !chargement && (
-          <>
-            <section className="mb-5 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Matchs du jour disponibles</p>
-                <p className="mt-1 text-2xl font-semibold">{donnees.nombreMatchs}</p>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Sélections</p>
-                <p className="mt-1 text-2xl font-semibold">{donnees.combine.paris.length}</p>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Cote combinée</p>
-                <p className="mt-1 text-2xl font-semibold text-emerald-400">{donnees.combine.coteTotale.toFixed(2)}</p>
-              </div>
-            </section>
-
-            {donnees.avertissements.map((avertissement) => (
-              <p key={avertissement} role="status" className="mb-3 rounded-lg border border-amber-800 bg-amber-950/40 p-3 text-sm text-amber-200">
-                {avertissement}
-              </p>
-            ))}
-
-            {donnees.clarification && (
-              <p role="status" className="mb-4 rounded-lg border border-sky-800 bg-sky-950/40 p-3 text-sm text-sky-200">
-                {donnees.clarification}
-              </p>
-            )}
-
-            <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-7">
-              <div className="flex flex-col gap-2 border-b border-slate-800 pb-5 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold">{donnees.combine.titre}</h2>
-                </div>
-                <div className="rounded-lg bg-emerald-400/10 px-3 py-2 text-right">
-                  <p className="text-xs text-emerald-200/70">Cote totale calculée</p>
-                  <p className="text-2xl font-bold text-emerald-300">{donnees.combine.coteTotale.toFixed(2)}</p>
-                </div>
-              </div>
-
-              <ol className="mt-5 space-y-3">
-                {donnees.combine.paris.map((pari, index) => (
-                  <li key={pari.id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-                    <div className="flex items-start gap-3">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-800 text-sm font-semibold">{index + 1}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                          <div>
-                            <p className="font-semibold">{pari.match}</p>
-                            <p className="mt-1 text-xs text-slate-500">{pari.competition} · {formaterDate(pari.coupEnvoi)}</p>
-                          </div>
-                          <span className="self-start rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 font-semibold text-emerald-300">
-                            {pari.selection} · {pari.cote.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-
-              <form onSubmit={envoyerMessage} className="mt-6">
-                <label htmlFor="message-combine" className="mb-2 block text-sm font-semibold">Modifie ton combiné</label>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input
-                    id="message-combine"
-                    value={message}
-                    onChange={(event) => setMessage(event.target.value)}
-                    maxLength={500}
-                    placeholder="Ex. : retire le pari sur Guingamp…"
-                    className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm outline-none ring-emerald-400 transition placeholder:text-slate-600 focus:ring-2"
-                    disabled={envoi}
-                  />
-                  <button
-                    type="submit"
-                    disabled={envoi || !message.trim()}
-                    className="rounded-lg bg-emerald-400 px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {envoi ? "Modification…" : "Modifier"}
-                  </button>
-                </div>
-              </form>
-            </section>
-          </>
-        )}
-
+        <ExplorateurMatchs />
       </div>
     </main>
   );
