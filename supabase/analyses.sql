@@ -11,7 +11,7 @@ create table public.analyses (
   saison        integer not null,
   match         jsonb not null,
   statistiques  jsonb not null,
-  analyse       jsonb not null,
+  "analyse"     jsonb not null,  -- entre guillemets : « analyse » est un mot réservé de PostgreSQL
   modele        text not null,
   created_at    timestamptz not null default now()
 );
