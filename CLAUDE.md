@@ -13,6 +13,10 @@ Parcours unique : saison → équipe → liste de ses matchs → clic → analys
 - Code simple, noms en français, pas d'abstraction ni de dépendance non justifiée. Ne pas rajouter de fonctionnalités non demandées.
 - Jamais de clé dans le code ni de variable `NEXT_PUBLIC_` pour un secret. Les fichiers qui lisent une clé importent `server-only`.
 
+## Git
+
+- Ne jamais mentionner Claude dans les noms de branche, les messages de commit ou les pull requests : pas de préfixe `claude/`, pas de lignes `Co-Authored-By` ni `Claude-Session`.
+
 ## Règles produit
 
 - Saisons passées uniquement, lues depuis API-Football (`/leagues`), jamais codées en dur. Compétition : constante `COMPETITION` dans `api-football.ts`.
