@@ -8,11 +8,11 @@ Base : `https://v3.football.api-sports.io` — authentification par l'en-tête `
 
 | Endpoint | Paramètres | Usage | Cache |
 | --- | --- | --- | --- |
-| `/leagues` | `id` | Nom, pays, saisons (`year`, `start`, `end`, `current`, `coverage.fixtures.statistics_fixtures`) | 1 jour |
+| `/leagues` | `id` | Saisons (`year`, `start`, `end`) | 1 semaine |
 | `/fixtures` | `league`, `season`, `status=FT-AET-PEN` | Tous les matchs terminés d'une saison en une requête | 1 semaine |
 | `/fixtures/statistics` | `fixture` | Un bloc par équipe (`team.id`, `statistics[].type/value`) | 1 semaine |
 
-Champs lus dans `/fixtures` : `fixture.id`, `fixture.date`, `fixture.status.short`, `fixture.venue.name`, `fixture.referee`, `league.id/name/season/round`, `teams.home/away.id/name/logo`, `goals.home/away`, `score.halftime`, `score.penalty`.
+Champs lus dans `/fixtures` : `fixture.id`, `fixture.date`, `league.round`, `teams.home/away.id/name`, `goals.home/away`.
 
 `goals` contient le score final (prolongation comprise). Les buts `home` sont associés à `teams.home` de la même réponse.
 
@@ -26,17 +26,16 @@ API-Football répond en HTTP 200 même en cas d'erreur. Le champ `errors` vaut `
 | `requests` | Quota journalier atteint | 429 |
 | `rateLimit` | Trop de requêtes par minute | 429 |
 | `plan` | Saison non incluse dans l'offre (le message indique les saisons autorisées) | 403 |
-| `access` | Compte suspendu | 403 |
+| `access` | Compte suspendu | 502 |
 | autre | Paramètre refusé | 502 |
 
 Traduction dans `lireErreurApi` (`src/lib/football/normalisation.ts`), testée dans `tests/football.test.mjs`.
 
 ## Coût en requêtes
 
-- Ouverture de l'application : 6 requêtes `/leagues` au plus une fois par jour et par instance.
-- Choix d'une saison : 1 requête `/fixtures`.
-- Ouverture d'un match : 1 requête `/fixtures/statistics` (si la saison annonce des statistiques).
-- Analyse IA : 0 requête supplémentaire si le match a déjà été ouvert (cache).
+- Ouverture de l'application : 1 requête `/leagues` (puis cache).
+- Choix d'une saison : 1 requête `/fixtures` (puis cache).
+- Clic sur un match jamais analysé : 1 requête `/fixtures/statistics`. Un match déjà analysé est relu dans Supabase (0 requête, 0 appel IA).
 
 ## Vérification manuelle (avec la clé)
 
