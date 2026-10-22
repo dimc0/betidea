@@ -31,6 +31,10 @@ API-Football         IA (Groq)            Supabase (table analyses)
 | `src/components/DetailMatch.tsx` | Score, statistiques, analyse (affichage) |
 | `src/components/AffichageAnalyse.tsx` | Texte de l'analyse (affichage) |
 | `src/app/analyses/` | Liste et détail des analyses enregistrées |
+| `src/lib/statut.ts` | Moteur des contrôles de santé (délai max, seuil « dégradé ») |
+| `src/lib/controles.ts` | Contrôles de Vercel, de l'IA, d'API-Football et de Supabase (`server-only`) |
+| `src/app/api/admin/statut/route.ts` | Lance les contrôles en parallèle, statut global = le pire |
+| `src/app/admin/page.tsx` | Tableau de bord des services (composant client) |
 
 ## Points à savoir expliquer
 

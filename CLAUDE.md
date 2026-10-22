@@ -9,7 +9,7 @@ Parcours unique : saison → équipe → liste de ses matchs → clic → analys
 ## Méthode à respecter (TD du module)
 
 - Suivre la structure du TD1 « fiches de révision » : types partagés (`src/lib/affiche.ts`), client IA unique (`src/lib/ia.ts`), génération dans `src/lib/generer-analyse.ts` (`CONSIGNE_SYSTEME`, `SCHEMA_ANALYSE`, `NOMBRE_TENTATIVES`, `estReponseValide`, `tenterGeneration`), routes qui valident ce qui vient du front et finissent par une fonction `reponseErreur…`.
-- Page d'accueil en composant serveur ; `"use client"` seulement sur `ExplorateurMatchs` ; composants d'affichage sans `"use client"`.
+- Page d'accueil en composant serveur ; `"use client"` seulement sur `ExplorateurMatchs` et la page `/admin` (comme dans le TD2) ; composants d'affichage sans `"use client"`.
 - Code simple, noms en français, pas d'abstraction ni de dépendance non justifiée. Ne pas rajouter de fonctionnalités non demandées.
 - Jamais de clé dans le code ni de variable `NEXT_PUBLIC_` pour un secret. Les fichiers qui lisent une clé importent `server-only`.
 
@@ -23,6 +23,11 @@ Parcours unique : saison → équipe → liste de ses matchs → clic → analys
 - Aucune donnée fictive. Ni cotes, ni paris.
 - Score et statistiques affichés depuis API-Football ; l'IA ne produit que du texte.
 - La forme envoyée à l'IA ne contient que les matchs antérieurs au match analysé.
+
+## TD2
+
+- Partie 1 faite : page `/admin` + `GET /api/admin/statut` (`src/lib/statut.ts`, `src/lib/controles.ts`). Contrôles : Vercel, modèle d'IA (`GET /models`), API-Football (`GET /status`), Supabase (`count` sur `analyses`). `/admin` est encore publique : à protéger dans la partie 2.
+- Adapter chaque partie du TD au projet (analyses de matchs au lieu de fiches, `connection()` au lieu de `force-dynamic`), en gardant le code du TD le plus fidèle possible.
 
 ## Pièges techniques connus
 

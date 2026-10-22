@@ -37,7 +37,9 @@ Dans Supabase, exécuter `supabase/analyses.sql` dans le **SQL Editor**.
 | `GET /api/matchs?saison=2023` | Matchs terminés de la saison (`/fixtures`, une seule requête) |
 | `POST /api/analyses` `{ saison, match }` | Statistiques du match (`/fixtures/statistics`), analyse par l'IA, enregistrement dans Supabase. Si le match a déjà été analysé, l'analyse enregistrée est renvoyée sans rappeler l'IA. |
 
-Pages : `/` (parcours), `/analyses` (liste), `/analyses/[id]` (détail).
+Pages : `/` (parcours), `/analyses` (liste), `/analyses/[id]` (détail), `/admin` (état des services).
+
+`GET /api/admin/statut` contrôle en parallèle Vercel, le modèle d'IA, API-Football et Supabase (5 s maximum par service, « dégradé » au-delà de 2 s). Aucun contrôle ne consomme de quota : `GET /models` pour l'IA, `GET /status` pour API-Football, un simple décompte pour Supabase. La page `/admin` est pour l'instant publique.
 
 Pour changer de compétition, modifier `COMPETITION` dans `src/lib/football/api-football.ts`.
 
