@@ -3,6 +3,7 @@ import { ErreurFootball, recupererMatchs, recupererStatistiques } from "@/lib/fo
 import { formeAvantMatch } from "@/lib/football/metier";
 import { genererAnalyse } from "@/lib/generer-analyse";
 import { ErreurIA } from "@/lib/ia";
+import { limiteurAnalyses } from "@/lib/limitation";
 import { creerClientServeur } from "@/lib/supabase/server";
 
 export const maxDuration = 120;
@@ -44,7 +45,34 @@ export async function POST(request: Request) {
     return Response.json(existante);
   }
 
-  // 2. Données du match, toujours relues depuis API-Football (jamais depuis le navigateur)
+  // 2. Vérification du quota de l'utilisateur, avant les ressources coûteuses (API-Football et IA).
+  // Relire une analyse déjà enregistrée (étape 1) ne consomme pas de quota.
+  const enTetesQuota: Record<string, string> = {};
+
+  try {
+    const quota = await limiteurAnalyses.limit(user.id);
+
+    enTetesQuota["X-RateLimit-Limit"] = String(quota.limit);
+    enTetesQuota["X-RateLimit-Remaining"] = String(quota.remaining);
+
+    if (!quota.success) {
+      const secondes = Math.max(1, Math.ceil((quota.reset - Date.now()) / 1000));
+      const minutes = Math.ceil(secondes / 60);
+
+      return Response.json(
+        {
+          erreur: `Vous avez atteint votre quota de ${quota.limit} analyses par heure. Réessayez dans ${minutes} minute(s).`,
+        },
+        { status: 429, headers: { ...enTetesQuota, "Retry-After": String(secondes) } }
+      );
+    }
+  } catch (erreur) {
+    // Si Redis est indisponible, on laisse passer la requête plutôt que de bloquer
+    // tous les utilisateurs : c'est un choix « fail open ».
+    console.error("Limitation de débit indisponible :", erreur);
+  }
+
+  // 3. Données du match, toujours relues depuis API-Football (jamais depuis le navigateur)
   let donnees;
   try {
     const matchs = await recupererMatchs(saison);
@@ -75,7 +103,7 @@ export async function POST(request: Request) {
     return Response.json({ erreur: "Les données du match n'ont pas pu être récupérées." }, { status: 502 });
   }
 
-  // 3. Analyse par le modèle d'IA
+  // 4. Analyse par le modèle d'IA
   let analyse;
   try {
     analyse = await genererAnalyse(donnees);
@@ -83,7 +111,7 @@ export async function POST(request: Request) {
     return reponseErreurIA(erreur);
   }
 
-  // 4. Enregistrement dans Supabase, au nom de l'utilisateur connecté (user_id = auth.uid() par défaut)
+  // 5. Enregistrement dans Supabase, au nom de l'utilisateur connecté (user_id = auth.uid() par défaut)
   const { data, error } = await supabase
     .from("analyses")
     .insert({
@@ -105,7 +133,7 @@ export async function POST(request: Request) {
     );
   }
 
-  return Response.json(data, { status: 201 });
+  return Response.json(data, { status: 201, headers: enTetesQuota });
 }
 
 function reponseErreurIA(erreur: unknown) {

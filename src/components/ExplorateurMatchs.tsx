@@ -14,6 +14,7 @@ export default function ExplorateurMatchs() {
   const [resultat, setResultat] = useState<AnalyseEnregistree | null>(null);
   const [chargement, setChargement] = useState("");
   const [erreur, setErreur] = useState("");
+  const [restantes, setRestantes] = useState<number | null>(null);
 
   // 1. Au chargement de la page : les saisons disponibles
   useEffect(() => {
@@ -62,6 +63,8 @@ export default function ExplorateurMatchs() {
         body: JSON.stringify({ saison, match: match.id }),
       });
       const donnees = await reponse.json();
+      const entete = reponse.headers.get("X-RateLimit-Remaining");
+      if (entete !== null) setRestantes(Number(entete));
       if (!reponse.ok) throw new Error(donnees.erreur);
       setResultat(donnees);
     } catch (error) {
@@ -116,6 +119,14 @@ export default function ExplorateurMatchs() {
       )}
 
       {chargement && <p className="animate-pulse text-slate-400">{chargement}</p>}
+
+      {restantes !== null && (
+        <p className="text-sm text-slate-500">
+          {restantes > 0
+            ? `Il vous reste ${restantes} analyse(s) pour l'heure en cours.`
+            : "Vous avez utilisé tout votre quota pour l'heure en cours."}
+        </p>
+      )}
 
       {matchsAffiches.length > 0 && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">

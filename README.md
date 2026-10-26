@@ -28,9 +28,12 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 SUPABASE_SECRET_KEY=
 
 ADMIN_EMAILS=
+
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
 ```
 
-Seules l'URL du projet Supabase (adresse racine, sans `/rest/v1`) et sa clé publiable portent le préfixe `NEXT_PUBLIC_` : elles ne sont pas secrètes et le navigateur en a besoin pour la connexion. Les clés secrètes ne le portent jamais. `ADMIN_EMAILS` liste, séparées par des virgules, les adresses autorisées à ouvrir `/admin`. Sur Vercel : **Settings → Environment Variables** (clés en **Sensitive**), supprimer `SUPABASE_URL`, puis redéployer (les variables `NEXT_PUBLIC_` sont intégrées au moment du build).
+Seules l'URL du projet Supabase (adresse racine, sans `/rest/v1`) et sa clé publiable portent le préfixe `NEXT_PUBLIC_` : elles ne sont pas secrètes et le navigateur en a besoin pour la connexion. Les clés secrètes ne le portent jamais. `ADMIN_EMAILS` liste, séparées par des virgules, les adresses autorisées à ouvrir `/admin`. `UPSTASH_REDIS_REST_URL` et `UPSTASH_REDIS_REST_TOKEN` viennent de la base Redis créée sur console.upstash.com (région européenne, offre gratuite). Sur Vercel : **Settings → Environment Variables** (clés en **Sensitive**), supprimer `SUPABASE_URL`, puis redéployer (les variables `NEXT_PUBLIC_` sont intégrées au moment du build).
 
 Dans Supabase, exécuter dans le **SQL Editor** `supabase/analyses.sql`, puis `supabase/authentification.sql`. Dans **Authentication → URL Configuration**, déclarer la Site URL de production et les Redirect URLs `http://localhost:3000/**` et `https://<production>/**`.
 
@@ -40,12 +43,12 @@ Dans Supabase, exécuter dans le **SQL Editor** `supabase/analyses.sql`, puis `s
 | --- | --- |
 | `GET /api/saisons` | Saisons terminées de la Ligue 1 (`/leagues`) |
 | `GET /api/matchs?saison=2023` | Matchs terminés de la saison (`/fixtures`, une seule requête) |
-| `POST /api/analyses` `{ saison, match }` | Réservé aux utilisateurs connectés (401 sinon). Statistiques du match (`/fixtures/statistics`), analyse par l'IA, enregistrement dans Supabase. Si l'utilisateur a déjà analysé ce match, son analyse est renvoyée sans rappeler l'IA. |
+| `POST /api/analyses` `{ saison, match }` | Réservé aux utilisateurs connectés (401 sinon). Statistiques du match (`/fixtures/statistics`), analyse par l'IA, enregistrement dans Supabase. Si l'utilisateur a déjà analysé ce match, son analyse est renvoyée sans rappeler l'IA. Sinon, quota de 5 nouvelles analyses par heure et par utilisateur (Upstash Redis, fenêtre glissante) : 429 + `Retry-After` au-delà, `X-RateLimit-Remaining` sur chaque réponse. |
 | `GET /auth/callback` | Échange le code du lien magique contre une session |
 
 Pages : `/connexion`, `/` (parcours), `/analyses` (mes analyses), `/analyses/[id]` (détail), `/admin` (état des services, administrateurs uniquement). Le proxy (`src/proxy.ts`) rafraîchit la session et redirige les visiteurs non connectés vers `/connexion`.
 
-`GET /api/admin/statut` (401 sans session, 403 si l'adresse n'est pas dans `ADMIN_EMAILS`) contrôle en parallèle Vercel, le modèle d'IA, API-Football, Supabase Database et Supabase Auth (5 s maximum par service, « dégradé » au-delà de 2 s). Aucun contrôle ne consomme de quota : `GET /models` pour l'IA, `GET /status` pour API-Football, un simple décompte pour Supabase, la première page des utilisateurs pour Supabase Auth.
+`GET /api/admin/statut` (401 sans session, 403 si l'adresse n'est pas dans `ADMIN_EMAILS`) contrôle en parallèle Vercel, le modèle d'IA, API-Football, Supabase Database, Supabase Auth et Upstash Redis (5 s maximum par service, « dégradé » au-delà de 2 s). Aucun contrôle ne consomme de quota : `GET /models` pour l'IA, `GET /status` pour API-Football, un simple décompte pour Supabase, la première page des utilisateurs pour Supabase Auth, `PING` pour Redis.
 
 Pour changer de compétition, modifier `COMPETITION` dans `src/lib/football/api-football.ts`.
 

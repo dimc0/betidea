@@ -28,7 +28,9 @@ Parcours unique : saison → équipe → liste de ses matchs → clic → analys
 ## TD2
 
 - Partie 1 faite : page `/admin` + `GET /api/admin/statut` (`src/lib/statut.ts`, `src/lib/controles.ts`). Contrôles : Vercel, modèle d'IA (`GET /models`), API-Football (`GET /status`), Supabase (`count` sur `analyses`), Supabase Auth (`listUsers`).
-- Partie 2 faite : connexion par lien magique (`/connexion`, `/auth/callback`), proxy de session (`src/proxy.ts`), analyses par utilisateur (`supabase/authentification.sql`, RLS, `unique (user_id, match_id)`), `/admin` réservée à `ADMIN_EMAILS` (404 page, 401/403 route).
+- Partie 2 faite : connexion par lien magique (`/connexion`, `/auth/callback`), proxy de session (`src/proxy.ts`), analyses par utilisateur (`supabase/authentification.sql`, RLS, `unique (user_id, match_id)`), `/admin` réservée à `ADMIN_EMAILS` (404 page, 401/403 route). SMTP Resend configuré dans Supabase (2.12).
+- Partie 3 (PDF, stockage) non faite.
+- Partie 4 faite : limitation de débit Upstash Redis (`src/lib/limitation.ts`, `limiteurAnalyses`, 5/h, préfixe `betidea:analyses`), vérifiée dans `POST /api/analyses` après la relecture d'une analyse existante et avant API-Football, fail open ; quota restant affiché dans `ExplorateurMatchs` ; contrôle Upstash Redis (`PING`) dans `/admin`.
 - Adapter chaque partie du TD au projet (analyses de matchs au lieu de fiches, `connection()` au lieu de `force-dynamic`), en gardant le code du TD le plus fidèle possible.
 
 ## Pièges techniques connus
@@ -37,6 +39,7 @@ Parcours unique : saison → équipe → liste de ses matchs → clic → analys
 - `await connection()` hors d'un `try/catch` dans un Route Handler.
 - Pages qui lisent Supabase : `await connection()` au lieu de `force-dynamic`, et `loading.tsx` dans le dossier comme limite `<Suspense>`.
 - Lecture du cookie de session (`creerClientServeur`) hors `<Suspense>` = erreur de build : `EnTete` est dans un `<Suspense>` du layout, les pages concernées ont un `loading.tsx`.
+- `partialPrefetching` lit la session pendant le prérendu, et Supabase appelle alors `Date.now()` (erreur « unstable value Date.now() ») : `await connection()` avant `creerClientServeur()` dans chaque composant serveur ou page qui lit la session.
 - API-Football répond en HTTP 200 même en erreur : lire `errors` (`lireErreurApi`).
 - Après suppression d'une route, `.next/types` peut garder d'anciens types : relancer `npm run build` avant `npm run typecheck`.
 - Lire `node_modules/next/dist/docs/` avant d'utiliser une API Next.js.
