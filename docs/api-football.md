@@ -29,7 +29,7 @@ API-Football répond en HTTP 200 même en cas d'erreur. Le champ `errors` vaut `
 | `access` | Compte suspendu | 502 |
 | autre | Paramètre refusé | 502 |
 
-Traduction dans `lireErreurApi` (`src/lib/football/normalisation.ts`), testée dans `tests/football.test.mjs`.
+Traduction dans `lireErreurApi` (`src/lib/football/normalisation.ts`).
 
 ## Coût en requêtes
 

@@ -2,14 +2,14 @@ import Link from "next/link";
 import { connection } from "next/server";
 import type { AnalyseEnregistree } from "@/lib/affiche";
 import { formaterDate } from "@/lib/football/metier";
-import { creerClientSupabase } from "@/lib/supabase";
+import { creerClientServeur } from "@/lib/supabase/server";
 
 export default async function ListeAnalyses() {
   // Équivalent de « force-dynamic » avec cacheComponents : la page est
   // recalculée à chaque visite pour afficher l'état actuel de la base.
   await connection();
 
-  const supabase = creerClientSupabase();
+  const supabase = await creerClientServeur();
   const { data: analyses, error } = await supabase
     .from("analyses")
     .select("id, match, created_at")

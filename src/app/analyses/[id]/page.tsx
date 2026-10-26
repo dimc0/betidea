@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import DetailMatch from "@/components/DetailMatch";
 import type { AnalyseEnregistree } from "@/lib/affiche";
-import { creerClientSupabase } from "@/lib/supabase";
+import { creerClientServeur } from "@/lib/supabase/server";
 
 export default async function DetailAnalyse({
   params,
@@ -11,7 +11,7 @@ export default async function DetailAnalyse({
 }) {
   const { id } = await params;
 
-  const supabase = creerClientSupabase();
+  const supabase = await creerClientServeur();
   const { data: analyse } = await supabase
     .from("analyses")
     .select("id, match, statistiques, analyse, created_at")

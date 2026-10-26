@@ -1,8 +1,10 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 
-export function creerClientSupabase() {
-  const url = process.env.SUPABASE_URL;
+// Ce client utilise la clé secrète : il ignore la Row Level Security.
+// Il ne doit servir qu'aux traitements sans utilisateur connecté.
+export function creerClientAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const cle = process.env.SUPABASE_SECRET_KEY;
 
   if (!url || !cle) {

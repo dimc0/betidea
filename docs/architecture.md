@@ -1,6 +1,6 @@
 # Architecture de Betidea
 
-Même organisation que le TD1 : le navigateur ne parle qu'au back, et seul le back détient les clés.
+Même organisation que le TD1 : le navigateur ne parle qu'au back, et seul le back détient les clés secrètes. Seule exception (TD2) : le navigateur parle à Supabase Auth avec la clé publiable pour demander un lien de connexion et se déconnecter.
 
 ```
 Navigateur (ExplorateurMatchs, composant client)
@@ -19,12 +19,18 @@ API-Football         IA (Groq)            Supabase (table analyses)
 | Fichier | Rôle |
 | --- | --- |
 | `src/lib/affiche.ts` | Types partagés (Saison, Equipe, Match, Statistique, Analyse) |
-| `src/lib/football/normalisation.ts` | Réponses API-Football → types Betidea (pur, testé) |
-| `src/lib/football/metier.ts` | Équipes de la saison, matchs d'une équipe, forme avant un match (pur, testé) |
+| `src/lib/football/normalisation.ts` | Réponses API-Football → types Betidea (pur) |
+| `src/lib/football/metier.ts` | Équipes de la saison, matchs d'une équipe, forme avant un match (pur) |
 | `src/lib/football/api-football.ts` | Appels à API-Football + cache (`server-only`) |
 | `src/lib/ia.ts` | Client du modèle d'IA |
 | `src/lib/generer-analyse.ts` | Consigne, schéma JSON, validation, nouvelle tentative |
-| `src/lib/supabase.ts` | Client Supabase (`server-only`) |
+| `src/lib/supabase/client.ts` | Client navigateur (clé publiable) : connexion, déconnexion |
+| `src/lib/supabase/server.ts` | Client serveur (clé publiable + cookie de session, RLS appliquée) |
+| `src/lib/supabase/admin.ts` | Client administrateur (clé secrète, RLS ignorée) : contrôles de `/admin` uniquement |
+| `src/lib/supabase/proxy.ts` + `src/proxy.ts` | Rafraîchit la session à chaque requête, redirige vers `/connexion` |
+| `src/lib/admin.ts` | `estAdministrateur` (liste `ADMIN_EMAILS`) |
+| `src/app/connexion/`, `src/app/auth/callback/` | Lien magique : formulaire, puis échange du code contre une session |
+| `src/components/EnTete.tsx` | Adresse de l'utilisateur et bouton de déconnexion |
 | `src/app/api/*/route.ts` | Routes du back |
 | `src/app/page.tsx` | Page d'accueil (composant serveur) |
 | `src/components/ExplorateurMatchs.tsx` | Saison → équipe → matchs → analyse (composant client) |
@@ -32,9 +38,10 @@ API-Football         IA (Groq)            Supabase (table analyses)
 | `src/components/AffichageAnalyse.tsx` | Texte de l'analyse (affichage) |
 | `src/app/analyses/` | Liste et détail des analyses enregistrées |
 | `src/lib/statut.ts` | Moteur des contrôles de santé (délai max, seuil « dégradé ») |
-| `src/lib/controles.ts` | Contrôles de Vercel, de l'IA, d'API-Football et de Supabase (`server-only`) |
+| `src/lib/controles.ts` | Contrôles de Vercel, de l'IA, d'API-Football, de Supabase Database et Auth (`server-only`) |
 | `src/app/api/admin/statut/route.ts` | Lance les contrôles en parallèle, statut global = le pire |
-| `src/app/admin/page.tsx` | Tableau de bord des services (composant client) |
+| `src/app/admin/page.tsx` | Vérifie l'administrateur (composant serveur), 404 sinon |
+| `src/components/TableauStatut.tsx` | Tableau de bord des services (composant client) |
 
 ## Points à savoir expliquer
 
@@ -42,4 +49,7 @@ API-Football         IA (Groq)            Supabase (table analyses)
 - **Passé / futur** : la « forme » envoyée à l'IA ne contient que les matchs joués avant le match analysé (`formeAvantMatch`).
 - **Cache** : une fonction `"use cache"` ne lève pas d'erreur (Next.js en masquerait le message en production) ; elle renvoie `{ ok, ... }` et l'erreur est levée en dehors.
 - **Pages Supabase** : `await connection()` remplace `force-dynamic` (incompatible avec `cacheComponents`) ; `loading.tsx` sert de limite `<Suspense>`.
-- **Quota IA** : un match déjà analysé est relu dans Supabase au lieu de rappeler l'IA.
+- **Quota IA** : un match déjà analysé par l'utilisateur est relu dans Supabase au lieu de rappeler l'IA.
+- **Authentification / autorisation** : Supabase Auth dit qui est l'utilisateur ; la Row Level Security (`supabase/authentification.sql`) filtre les analyses par `user_id`. `user_id` vaut `auth.uid()` par défaut : la route n'envoie jamais l'auteur. Contrainte `unique (user_id, match_id)` : un même match peut être analysé par plusieurs utilisateurs.
+- **Clé secrète** : le client administrateur ignore la RLS ; il n'est utilisé que pour les contrôles de `/admin`, jamais pour une requête faite au nom d'un utilisateur.
+- **Session et cacheComponents** : tout ce qui lit le cookie est dans une limite `<Suspense>` (`EnTete` dans le layout, `loading.tsx` dans `/connexion`, `/admin`, `/analyses`).
