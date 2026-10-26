@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import FormulaireConnexion from "@/components/FormulaireConnexion";
 import { creerClientServeur } from "@/lib/supabase/server";
 
@@ -7,6 +8,9 @@ export default async function Connexion({
 }: {
   searchParams: Promise<{ erreur?: string }>;
 }) {
+  // Session lue à chaque requête (voir EnTete).
+  await connection();
+
   const supabase = await creerClientServeur();
   const {
     data: { user },

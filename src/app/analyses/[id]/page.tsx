@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import DetailMatch from "@/components/DetailMatch";
 import type { AnalyseEnregistree } from "@/lib/affiche";
 import { creerClientServeur } from "@/lib/supabase/server";
@@ -10,6 +11,9 @@ export default async function DetailAnalyse({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+
+  // Session lue à chaque requête (voir EnTete).
+  await connection();
 
   const supabase = await creerClientServeur();
   const { data: analyse } = await supabase

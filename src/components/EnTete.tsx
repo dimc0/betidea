@@ -1,8 +1,13 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import BoutonDeconnexion from "@/components/BoutonDeconnexion";
 import { creerClientServeur } from "@/lib/supabase/server";
 
 export default async function EnTete() {
+  // Lecture de la session à chaque requête : Supabase compare l'expiration du jeton
+  // à l'heure actuelle (Date.now()), interdit pendant le prérendu avec cacheComponents.
+  await connection();
+
   const supabase = await creerClientServeur();
   const {
     data: { user },
