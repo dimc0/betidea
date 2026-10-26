@@ -3,7 +3,7 @@ import { ErreurFootball, recupererMatchs, recupererStatistiques } from "@/lib/fo
 import { formeAvantMatch } from "@/lib/football/metier";
 import { genererAnalyse } from "@/lib/generer-analyse";
 import { ErreurIA } from "@/lib/ia";
-import { creerClientSupabase } from "@/lib/supabase";
+import { creerClientServeur } from "@/lib/supabase/server";
 
 export const maxDuration = 120;
 
@@ -11,6 +11,19 @@ const COLONNES = "id, match, statistiques, analyse, created_at";
 
 // Analyse d'un match : { saison: 2023, match: 1234 }
 export async function POST(request: Request) {
+  // 0. Vérification de la session : rien n'est fait (ni quota API-Football, ni IA) pour un visiteur
+  const supabase = await creerClientServeur();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return Response.json(
+      { erreur: "Votre session a expiré. Reconnectez-vous pour analyser un match." },
+      { status: 401 }
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const saison = Number(body?.saison);
   const matchId = Number(body?.match);
@@ -19,15 +32,8 @@ export async function POST(request: Request) {
     return Response.json({ erreur: "La saison et le match sont obligatoires." }, { status: 400 });
   }
 
-  // 1. Si ce match a déjà été analysé, on renvoie l'analyse enregistrée (pas de nouvel appel à l'IA).
-  let supabase;
-  try {
-    supabase = creerClientSupabase();
-  } catch (erreur) {
-    console.error(erreur);
-    return Response.json({ erreur: "La base de données n'est pas configurée." }, { status: 500 });
-  }
-
+  // 1. Si l'utilisateur a déjà analysé ce match, on renvoie son analyse (pas de nouvel appel à l'IA).
+  // Pas besoin de filtrer par user_id : la Row Level Security ne renvoie que ses analyses.
   const { data: existante } = await supabase
     .from("analyses")
     .select(COLONNES)
@@ -77,7 +83,7 @@ export async function POST(request: Request) {
     return reponseErreurIA(erreur);
   }
 
-  // 4. Enregistrement dans Supabase
+  // 4. Enregistrement dans Supabase, au nom de l'utilisateur connecté (user_id = auth.uid() par défaut)
   const { data, error } = await supabase
     .from("analyses")
     .insert({

@@ -1,5 +1,5 @@
 // Conversion des réponses d'API-Football vers les types de Betidea.
-// Fonctions pures (sans réseau), testées dans tests/football.test.mjs.
+// Fonctions pures (sans réseau).
 import type { Match, Saison, Statistique } from "@/lib/affiche";
 
 export function estObjet(valeur: unknown): valeur is Record<string, unknown> {
