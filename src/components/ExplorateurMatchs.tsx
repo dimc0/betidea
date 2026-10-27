@@ -5,6 +5,30 @@ import DetailMatch from "@/components/DetailMatch";
 import type { AnalyseEnregistree, Match, Saison } from "@/lib/affiche";
 import { formaterDate, listerEquipes, matchsDeLEquipe } from "@/lib/football/metier";
 
+const INTERVALLE_MS = 2000;
+const VERIFICATIONS_MAX = 45;
+const ETAPE_ARRIERE_PLAN = "Analyse en arrière-plan…";
+
+// Interroge régulièrement le back jusqu'à ce que l'analyse soit prête ou en erreur
+async function attendreAnalyse(id: string): Promise<AnalyseEnregistree> {
+  for (let i = 0; i < VERIFICATIONS_MAX; i++) {
+    await new Promise((resolve) => setTimeout(resolve, INTERVALLE_MS));
+
+    const reponse = await fetch(`/api/analyses/${id}`, { cache: "no-store" });
+    if (!reponse.ok) continue;
+
+    const analyse: AnalyseEnregistree = await reponse.json();
+    if (analyse.statut === "prete") return analyse;
+    if (analyse.statut === "erreur") {
+      throw new Error(analyse.message_erreur ?? "La génération de l'analyse a échoué.");
+    }
+  }
+
+  throw new Error(
+    "L'analyse prend plus de temps que prévu. Elle apparaîtra dans « Mes analyses » dès qu'elle sera prête."
+  );
+}
+
 export default function ExplorateurMatchs() {
   const [saisons, setSaisons] = useState<Saison[]>([]);
   const [saison, setSaison] = useState<number | null>(null);
@@ -49,12 +73,12 @@ export default function ExplorateurMatchs() {
     }
   }
 
-  // 3. Clic sur un match : analyse automatique
+  // 3. Clic sur un match : demande d'analyse, puis attente du traitement en arrière-plan
   async function analyserMatch(match: Match) {
     setMatchChoisi(match.id);
     setResultat(null);
     setErreur("");
-    setChargement("Analyse du match en cours…");
+    setChargement("Enregistrement de la demande…");
 
     try {
       const reponse = await fetch("/api/analyses", {
@@ -66,7 +90,16 @@ export default function ExplorateurMatchs() {
       const entete = reponse.headers.get("X-RateLimit-Remaining");
       if (entete !== null) setRestantes(Number(entete));
       if (!reponse.ok) throw new Error(donnees.erreur);
-      setResultat(donnees);
+
+      // Analyse déjà prête (match déjà analysé) : affichage direct
+      if (donnees.statut === "prete") {
+        setResultat(donnees);
+        return;
+      }
+
+      // Demande acceptée (202) ou déjà en cours : on attend le worker
+      setChargement(ETAPE_ARRIERE_PLAN);
+      setResultat(await attendreAnalyse(donnees.id));
     } catch (error) {
       setErreur(error instanceof Error ? error.message : "L'analyse a échoué.");
     } finally {
@@ -119,6 +152,13 @@ export default function ExplorateurMatchs() {
       )}
 
       {chargement && <p className="animate-pulse text-slate-400">{chargement}</p>}
+
+      {chargement === ETAPE_ARRIERE_PLAN && (
+        <p className="text-sm text-slate-500">
+          Vous pouvez quitter cette page : l&apos;analyse apparaîtra dans « Mes analyses » dès
+          qu&apos;elle sera prête.
+        </p>
+      )}
 
       {restantes !== null && (
         <p className="text-sm text-slate-500">

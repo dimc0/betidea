@@ -1,16 +1,12 @@
-import type { Statistique } from "@/lib/affiche";
-import { ErreurFootball, recupererMatchs, recupererStatistiques } from "@/lib/football/api-football";
-import { formeAvantMatch } from "@/lib/football/metier";
-import { genererAnalyse } from "@/lib/generer-analyse";
-import { ErreurIA } from "@/lib/ia";
+import { ErreurFootball, recupererMatchs } from "@/lib/football/api-football";
 import { limiteurAnalyses } from "@/lib/limitation";
+import { publierGeneration } from "@/lib/qstash";
+import { creerClientAdmin } from "@/lib/supabase/admin";
 import { creerClientServeur } from "@/lib/supabase/server";
 
-export const maxDuration = 120;
+const COLONNES = "id, match, statistiques, analyse, created_at, statut, message_erreur";
 
-const COLONNES = "id, match, statistiques, analyse, created_at";
-
-// Analyse d'un match : { saison: 2023, match: 1234 }
+// Demande d'analyse d'un match : { saison: 2023, match: 1234 }
 export async function POST(request: Request) {
   // 0. Vérification de la session : rien n'est fait (ni quota API-Football, ni IA) pour un visiteur
   const supabase = await creerClientServeur();
@@ -33,15 +29,16 @@ export async function POST(request: Request) {
     return Response.json({ erreur: "La saison et le match sont obligatoires." }, { status: 400 });
   }
 
-  // 1. Si l'utilisateur a déjà analysé ce match, on renvoie son analyse (pas de nouvel appel à l'IA).
+  // 1. Si l'utilisateur a déjà demandé ce match, on renvoie sa demande (prête ou en cours).
   // Pas besoin de filtrer par user_id : la Row Level Security ne renvoie que ses analyses.
+  // Seule une analyse en échec est relancée.
   const { data: existante } = await supabase
     .from("analyses")
     .select(COLONNES)
     .eq("match_id", matchId)
     .maybeSingle();
 
-  if (existante) {
+  if (existante && existante.statut !== "erreur") {
     return Response.json(existante);
   }
 
@@ -72,88 +69,87 @@ export async function POST(request: Request) {
     console.error("Limitation de débit indisponible :", erreur);
   }
 
-  // 3. Données du match, toujours relues depuis API-Football (jamais depuis le navigateur)
-  let donnees;
-  try {
-    const matchs = await recupererMatchs(saison);
-    const match = matchs.find((element) => element.id === matchId);
+  // 3. Enregistrement de la demande, avec le statut « en attente »
+  let analyseId: string;
+
+  if (existante) {
+    // Relance d'une analyse en échec. La Row Level Security n'autorise pas l'utilisateur à modifier
+    // ses analyses : le statut est un champ géré par le système, d'où le client administrateur.
+    const { error } = await creerClientAdmin()
+      .from("analyses")
+      .update({ statut: "en_attente", message_erreur: null })
+      .eq("id", existante.id);
+
+    if (error) {
+      console.error("Erreur lors de la relance de l'analyse :", error);
+      return reponseErreurEnregistrement();
+    }
+    analyseId = existante.id;
+  } else {
+    // Le match est relu dans API-Football (en cache) : une demande pour un match inexistant
+    // est refusée immédiatement, sans rien enregistrer.
+    let match;
+    try {
+      const matchs = await recupererMatchs(saison);
+      match = matchs.find((element) => element.id === matchId);
+    } catch (erreur) {
+      return reponseErreurFootball(erreur);
+    }
+
     if (!match) {
       return Response.json({ erreur: "Ce match est introuvable dans cette saison." }, { status: 404 });
     }
 
-    // Sans statistiques, l'analyse reste possible avec le score et la forme des équipes.
-    let statistiques: Statistique[] = [];
-    try {
-      statistiques = await recupererStatistiques(match);
-    } catch (erreur) {
-      console.warn("Statistiques indisponibles :", erreur);
-    }
+    // user_id = auth.uid() par défaut, statut = « en_attente » par défaut
+    const { data, error } = await supabase
+      .from("analyses")
+      .insert({ match_id: matchId, saison, match })
+      .select("id")
+      .single();
 
-    donnees = {
-      match,
-      statistiques,
-      formeDomicile: formeAvantMatch(matchs, match, match.domicile.id),
-      formeExterieur: formeAvantMatch(matchs, match, match.exterieur.id),
-    };
-  } catch (erreur) {
-    if (erreur instanceof ErreurFootball) {
-      return Response.json({ erreur: erreur.message }, { status: erreur.status });
+    if (error || !data) {
+      console.error("Erreur lors de l'enregistrement de la demande :", error);
+      return reponseErreurEnregistrement();
     }
-    console.error(erreur);
-    return Response.json({ erreur: "Les données du match n'ont pas pu être récupérées." }, { status: 502 });
+    analyseId = data.id;
   }
 
-  // 4. Analyse par le modèle d'IA
-  let analyse;
+  // 4. Publication du message de génération dans la file
   try {
-    analyse = await genererAnalyse(donnees);
+    await publierGeneration(analyseId);
   } catch (erreur) {
-    return reponseErreurIA(erreur);
-  }
+    console.error("Erreur lors de la publication du message :", erreur);
 
-  // 5. Enregistrement dans Supabase, au nom de l'utilisateur connecté (user_id = auth.uid() par défaut)
-  const { data, error } = await supabase
-    .from("analyses")
-    .insert({
-      match_id: matchId,
-      saison,
-      match: donnees.match,
-      statistiques: donnees.statistiques,
-      analyse,
-      modele: process.env.AI_MODEL || "openai/gpt-oss-20b",
-    })
-    .select(COLONNES)
-    .single();
+    // Traitement système, sans utilisateur : usage légitime du client administrateur
+    await creerClientAdmin()
+      .from("analyses")
+      .update({ statut: "erreur", message_erreur: "La génération n'a pas pu être lancée." })
+      .eq("id", analyseId);
 
-  if (error) {
-    console.error("Erreur lors de l'enregistrement de l'analyse :", error);
     return Response.json(
-      { erreur: "L'analyse a été générée mais n'a pas pu être enregistrée. Réessayez plus tard." },
-      { status: 500 }
+      { erreur: "La génération n'a pas pu être lancée. Réessayez plus tard." },
+      { status: 503 }
     );
   }
 
-  return Response.json(data, { status: 201, headers: enTetesQuota });
+  // 5. Réponse immédiate : la demande est acceptée, le traitement suivra
+  return Response.json(
+    { id: analyseId, statut: "en_attente" },
+    { status: 202, headers: enTetesQuota }
+  );
 }
 
-function reponseErreurIA(erreur: unknown) {
-  if (erreur instanceof ErreurIA && erreur.status === 429) {
-    return Response.json(
-      { erreur: "Le quota du service d'IA est atteint. Réessayez dans quelques instants." },
-      { status: 429 }
-    );
-  }
-
-  if (erreur instanceof Error && erreur.name === "TimeoutError") {
-    return Response.json(
-      { erreur: "Le service d'IA met trop de temps à répondre. Réessayez plus tard." },
-      { status: 504 }
-    );
-  }
-
-  console.error(erreur);
+function reponseErreurEnregistrement() {
   return Response.json(
-    { erreur: "La génération de l'analyse a échoué. Réessayez plus tard." },
-    { status: 502 }
+    { erreur: "La demande n'a pas pu être enregistrée. Réessayez plus tard." },
+    { status: 500 }
   );
+}
+
+function reponseErreurFootball(erreur: unknown) {
+  if (erreur instanceof ErreurFootball) {
+    return Response.json({ erreur: erreur.message }, { status: erreur.status });
+  }
+  console.error(erreur);
+  return Response.json({ erreur: "Les données du match n'ont pas pu être récupérées." }, { status: 502 });
 }

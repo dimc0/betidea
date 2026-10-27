@@ -31,6 +31,7 @@ Parcours unique : saison → équipe → liste de ses matchs → clic → analys
 - Partie 2 faite : connexion par lien magique (`/connexion`, `/auth/callback`), proxy de session (`src/proxy.ts`), analyses par utilisateur (`supabase/authentification.sql`, RLS, `unique (user_id, match_id)`), `/admin` réservée à `ADMIN_EMAILS` (404 page, 401/403 route). SMTP Resend configuré dans Supabase (2.12).
 - Partie 3 (PDF, stockage) non faite.
 - Partie 4 faite : limitation de débit Upstash Redis (`src/lib/limitation.ts`, `limiteurAnalyses`, 5/h, préfixe `betidea:analyses`), vérifiée dans `POST /api/analyses` après la relecture d'une analyse existante et avant API-Football, fail open ; quota restant affiché dans `ExplorateurMatchs` ; contrôle Upstash Redis (`PING`) dans `/admin`.
+- Partie 5 faite : génération asynchrone avec QStash. `POST /api/analyses` enregistre `en_attente` (ou relance une analyse en `erreur`), publie (`src/lib/qstash.ts`) et répond 202 ; worker `src/app/api/jobs/generer-analyse/route.ts` (signature, idempotence, client admin, 500 = réessayer) ; polling sur `GET /api/analyses/[id]` dans `ExplorateurMatchs` ; colonnes `statut`, `message_erreur` (`supabase/asynchrone.sql`) ; contrôle Upstash QStash dans `/admin`.
 - Adapter chaque partie du TD au projet (analyses de matchs au lieu de fiches, `connection()` au lieu de `force-dynamic`), en gardant le code du TD le plus fidèle possible.
 
 ## Pièges techniques connus
@@ -40,6 +41,7 @@ Parcours unique : saison → équipe → liste de ses matchs → clic → analys
 - Pages qui lisent Supabase : `await connection()` au lieu de `force-dynamic`, et `loading.tsx` dans le dossier comme limite `<Suspense>`.
 - Lecture du cookie de session (`creerClientServeur`) hors `<Suspense>` = erreur de build : `EnTete` est dans un `<Suspense>` du layout, les pages concernées ont un `loading.tsx`.
 - `partialPrefetching` lit la session pendant le prérendu, et Supabase appelle alors `Date.now()` (erreur « unstable value Date.now() ») : `await connection()` avant `creerClientServeur()` dans chaque composant serveur ou page qui lit la session.
+- `verifySignatureAppRouter` lève une erreur au chargement si `QSTASH_CURRENT_SIGNING_KEY`/`QSTASH_NEXT_SIGNING_KEY` manquent : build impossible sans ces variables (local et Vercel).
 - API-Football répond en HTTP 200 même en erreur : lire `errors` (`lireErreurApi`).
 - Après suppression d'une route, `.next/types` peut garder d'anciens types : relancer `npm run build` avant `npm run typecheck`.
 - Lire `node_modules/next/dist/docs/` avant d'utiliser une API Next.js.
