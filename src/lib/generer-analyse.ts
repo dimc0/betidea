@@ -60,7 +60,7 @@ Date : ${match.date.slice(0, 10)} (${match.journee})
 Statistiques du match :
 ${statistiques.length > 0
     ? statistiques.map((s) => `- ${s.nom} : ${s.domicile ?? "non fourni"} / ${s.exterieur ?? "non fourni"}`).join("\n")
-    : "Aucune statistique fournie par API-Football."}
+    : "Aucune statistique fournie par football-data.org."}
 
 5 derniers matchs de ${match.domicile.nom} avant ce match :
 ${formeDomicile.join("\n") || "Aucun."}

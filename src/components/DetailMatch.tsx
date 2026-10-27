@@ -3,7 +3,7 @@ import AffichageAnalyse from "@/components/AffichageAnalyse";
 import type { AnalyseEnregistree } from "@/lib/affiche";
 import { formaterDate } from "@/lib/football/metier";
 
-// Score, statistiques (données API-Football) puis analyse de l'IA.
+// Score, statistiques (données football-data.org) puis analyse de l'IA.
 export default function DetailMatch({ resultat }: { resultat: AnalyseEnregistree }) {
   const { match, statistiques, analyse } = resultat;
 
@@ -30,7 +30,7 @@ export default function DetailMatch({ resultat }: { resultat: AnalyseEnregistree
         </table>
       ) : (
         <p className="mt-4 text-sm text-slate-400">
-          API-Football ne fournit pas de statistiques pour ce match.
+          football-data.org ne fournit pas de statistiques pour ce match.
         </p>
       )}
 

@@ -5,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Betidea — Analyse historique du football",
-  description: "Matchs terminés des saisons passées, statistiques API-Football et analyses par l'IA.",
+  description: "Matchs terminés des saisons passées, données football-data.org et analyses par l'IA.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

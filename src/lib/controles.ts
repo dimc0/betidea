@@ -49,18 +49,19 @@ const controleIA: Controle = {
   },
 };
 
-const controleApiFootball: Controle = {
-  service: "API-Football",
-  description: "Saisons, matchs et statistiques",
+const controleFootballData: Controle = {
+  service: "football-data.org",
+  description: "Saisons et matchs de Ligue 1",
   verifier: async () => {
-    const apiKey = process.env.API_FOOTBALL_KEY;
+    const apiKey = process.env.FOOTBALL_DATA_KEY;
     if (!apiKey) {
-      throw new Error("Variable API_FOOTBALL_KEY manquante");
+      throw new Error("Variable FOOTBALL_DATA_KEY manquante");
     }
 
-    // GET /status : informations du compte, sans consommer le quota de requêtes.
-    const reponse = await fetch("https://v3.football.api-sports.io/status", {
-      headers: { "x-apisports-key": apiKey },
+    // GET /competitions/FL1 : vérifie la clé avec une requête légère (pas de quota journalier,
+    // seulement 10 requêtes par minute).
+    const reponse = await fetch("https://api.football-data.org/v4/competitions/FL1", {
+      headers: { "X-Auth-Token": apiKey },
       cache: "no-store",
     });
 
@@ -68,20 +69,10 @@ const controleApiFootball: Controle = {
       throw new Error(`L'API a répondu avec le statut ${reponse.status}`);
     }
 
-    // API-Football répond en HTTP 200 même en cas d'erreur : il faut lire « errors ».
-    const donnees = await reponse.json();
-    const erreurs = donnees.errors && !Array.isArray(donnees.errors) ? Object.values(donnees.errors) : [];
-    if (erreurs.length > 0) {
-      throw new Error(String(erreurs[0]));
-    }
-
-    const offre = donnees.response?.subscription?.plan ?? "inconnue";
-    const utilisees = donnees.response?.requests?.current;
-    const limite = donnees.response?.requests?.limit_day;
-
-    return utilisees !== undefined && limite !== undefined
-      ? `Offre ${offre} · ${utilisees} / ${limite} requêtes utilisées aujourd'hui`
-      : `Offre ${offre}`;
+    const restantes = reponse.headers.get("X-Requests-Available-Minute");
+    return restantes !== null
+      ? `Clé valide · ${restantes} requête(s) restante(s) cette minute`
+      : "Clé valide";
   },
 };
 
@@ -157,7 +148,7 @@ const controleQStash: Controle = {
 export const CONTROLES: Controle[] = [
   controleVercel,
   controleIA,
-  controleApiFootball,
+  controleFootballData,
   controleBase,
   controleAuth,
   controleRedis,

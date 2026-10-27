@@ -9,8 +9,12 @@ import {
   lireStatistiques,
 } from "@/lib/football/normalisation";
 
-// Compétition analysée (identifiant API-Football). 61 = Ligue 1.
-export const COMPETITION = { id: 61, nom: "Ligue 1" };
+// Compétition analysée (code football-data.org). FL1 = Ligue 1.
+export const COMPETITION = { code: "FL1", nom: "Ligue 1" };
+
+// L'offre gratuite donne accès à la saison en cours et aux 3 précédentes (les plus anciennes
+// répondent 403) : on ne propose donc que les 3 dernières saisons terminées.
+const SAISONS_ACCESSIBLES = 3;
 
 export class ErreurFootball extends Error {
   status: number;
@@ -23,42 +27,38 @@ export class ErreurFootball extends Error {
 
 // Les fonctions « use cache » ne doivent pas lever d'erreur : en production,
 // Next.js remplacerait le message. Elles renvoient donc { ok, ... }.
-type Resultat = { ok: true; donnees: unknown[] } | { ok: false; erreur: string; status: number };
+type Resultat = { ok: true; donnees: unknown } | { ok: false; erreur: string; status: number };
 
-async function appelerApiFootball(
+async function appelerFootballData(
   chemin: string,
   parametres: Record<string, string>
 ): Promise<Resultat> {
-  const apiKey = process.env.API_FOOTBALL_KEY;
+  const apiKey = process.env.FOOTBALL_DATA_KEY;
   if (!apiKey) {
-    return { ok: false, erreur: "La variable serveur API_FOOTBALL_KEY n'est pas configurée.", status: 500 };
+    return { ok: false, erreur: "La variable serveur FOOTBALL_DATA_KEY n'est pas configurée.", status: 500 };
   }
 
-  const url = new URL(chemin, "https://v3.football.api-sports.io");
+  const url = new URL(`/v4${chemin}`, "https://api.football-data.org");
   for (const [cle, valeur] of Object.entries(parametres)) {
     url.searchParams.set(cle, valeur);
   }
 
   try {
     const reponse = await fetch(url, {
-      headers: { "x-apisports-key": apiKey },
+      headers: { "X-Auth-Token": apiKey },
       signal: AbortSignal.timeout(15000),
     });
-    const donnees: unknown = await reponse.json();
+    const donnees: unknown = await reponse.json().catch(() => null);
 
-    if (!reponse.ok || !estObjet(donnees)) {
-      return { ok: false, erreur: `API-Football a renvoyé une erreur (HTTP ${reponse.status}).`, status: 502 };
-    }
-
-    const erreurApi = lireErreurApi(donnees.errors);
-    if (erreurApi) {
-      console.error(`Erreur API-Football ${chemin} : ${erreurApi.message}`);
+    if (!reponse.ok) {
+      const erreurApi = lireErreurApi(reponse.status, donnees);
+      console.error(`Erreur football-data.org ${chemin} : ${erreurApi.message}`);
       return { ok: false, erreur: erreurApi.message, status: erreurApi.status };
     }
 
-    return { ok: true, donnees: Array.isArray(donnees.response) ? donnees.response : [] };
+    return { ok: true, donnees };
   } catch {
-    return { ok: false, erreur: "API-Football est injoignable pour le moment.", status: 503 };
+    return { ok: false, erreur: "football-data.org est injoignable pour le moment.", status: 503 };
   }
 }
 
@@ -67,7 +67,7 @@ async function appelerApiFootball(
 async function appelerAvecCache(chemin: string, parametres: Record<string, string>) {
   "use cache";
 
-  const resultat = await appelerApiFootball(chemin, parametres);
+  const resultat = await appelerFootballData(chemin, parametres);
   if (resultat.ok) {
     cacheLife("weeks");
   } else {
@@ -76,32 +76,31 @@ async function appelerAvecCache(chemin: string, parametres: Record<string, strin
   return resultat;
 }
 
-async function lireApi(chemin: string, parametres: Record<string, string>): Promise<unknown[]> {
+async function lireApi(chemin: string, parametres: Record<string, string> = {}): Promise<unknown> {
   const resultat = await appelerAvecCache(chemin, parametres);
   if (!resultat.ok) throw new ErreurFootball(resultat.erreur, resultat.status);
   return resultat.donnees;
 }
 
 export async function recupererSaisons(): Promise<Saison[]> {
-  const reponse = await lireApi("/leagues", { id: String(COMPETITION.id) });
-  return lireSaisonsPassees(reponse[0], new Date().toISOString().slice(0, 10));
+  const competition = await lireApi(`/competitions/${COMPETITION.code}`);
+  return lireSaisonsPassees(competition, new Date().toISOString().slice(0, 10), SAISONS_ACCESSIBLES);
 }
 
 // Tous les matchs terminés d'une saison, en une seule requête.
 export async function recupererMatchs(saison: number): Promise<Match[]> {
-  const reponse = await lireApi("/fixtures", {
-    league: String(COMPETITION.id),
+  const reponse = await lireApi(`/competitions/${COMPETITION.code}/matches`, {
     season: String(saison),
-    status: "FT-AET-PEN",
   });
+  const matchs = estObjet(reponse) && Array.isArray(reponse.matches) ? reponse.matches : [];
 
-  return reponse
+  return matchs
     .map(lireMatch)
     .filter((match): match is Match => match !== null)
     .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
 }
 
 export async function recupererStatistiques(match: Match): Promise<Statistique[]> {
-  const reponse = await lireApi("/fixtures/statistics", { fixture: String(match.id) });
-  return lireStatistiques(reponse, match);
+  const detail = await lireApi(`/matches/${match.id}`);
+  return lireStatistiques(detail);
 }
