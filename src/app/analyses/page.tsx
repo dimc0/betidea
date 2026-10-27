@@ -12,9 +12,9 @@ export default async function ListeAnalyses() {
   const supabase = await creerClientServeur();
   const { data: analyses, error } = await supabase
     .from("analyses")
-    .select("id, match, created_at")
+    .select("id, match, created_at, statut")
     .order("created_at", { ascending: false })
-    .returns<Pick<AnalyseEnregistree, "id" | "match" | "created_at">[]>();
+    .returns<Pick<AnalyseEnregistree, "id" | "match" | "created_at" | "statut">[]>();
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100 sm:px-8">
@@ -33,7 +33,7 @@ export default async function ListeAnalyses() {
         )}
 
         <ul className="mt-6 flex flex-col gap-3">
-          {analyses?.map(({ id, match, created_at }) => (
+          {analyses?.map(({ id, match, created_at, statut }) => (
             <li key={id}>
               <Link
                 href={`/analyses/${id}`}
@@ -41,6 +41,17 @@ export default async function ListeAnalyses() {
               >
                 <p className="font-semibold">
                   {match.domicile.nom} {match.butsDomicile} - {match.butsExterieur} {match.exterieur.nom}
+                  {statut !== "prete" && (
+                    <span
+                      className={`ml-2 rounded px-2 py-0.5 text-xs ${
+                        statut === "en_attente"
+                          ? "bg-amber-950 text-amber-300"
+                          : "bg-rose-950 text-rose-300"
+                      }`}
+                    >
+                      {statut === "en_attente" ? "En cours de génération" : "Échec"}
+                    </span>
+                  )}
                 </p>
                 <p className="text-sm text-slate-500">
                   Match du {formaterDate(match.date)} · analysé le {formaterDate(created_at)}

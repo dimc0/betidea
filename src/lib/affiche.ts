@@ -36,11 +36,16 @@ export type Analyse = {
   limites: string[];
 };
 
-// Ce que renvoie POST /api/analyses et ce qui est enregistré dans Supabase.
+export type StatutAnalyse = "en_attente" | "prete" | "erreur";
+
+// Ce qui est enregistré dans Supabase. Tant que le statut n'est pas « prete »,
+// les statistiques et l'analyse sont vides en base : toujours vérifier le statut avant de les afficher.
 export type AnalyseEnregistree = {
   id: string;
   match: Match;
   statistiques: Statistique[];
   analyse: Analyse;
   created_at: string;
+  statut: StatutAnalyse;
+  message_erreur: string | null;
 };

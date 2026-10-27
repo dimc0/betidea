@@ -18,7 +18,7 @@ export default async function DetailAnalyse({
   const supabase = await creerClientServeur();
   const { data: analyse } = await supabase
     .from("analyses")
-    .select("id, match, statistiques, analyse, created_at")
+    .select("id, match, statistiques, analyse, created_at, statut, message_erreur")
     .eq("id", id)
     .maybeSingle<AnalyseEnregistree>();
 
@@ -33,7 +33,21 @@ export default async function DetailAnalyse({
           ← Retour à mes analyses
         </Link>
         <div className="mt-4">
-          <DetailMatch resultat={analyse} />
+          {analyse.statut === "prete" && <DetailMatch resultat={analyse} />}
+
+          {analyse.statut === "en_attente" && (
+            <p className="rounded-lg border border-amber-900 bg-amber-950/60 p-3 text-amber-200">
+              L&apos;analyse de {analyse.match.domicile.nom} - {analyse.match.exterieur.nom} est en
+              cours de génération. Rechargez la page dans quelques instants.
+            </p>
+          )}
+
+          {analyse.statut === "erreur" && (
+            <p className="rounded-lg border border-rose-900 bg-rose-950/60 p-3 text-rose-200">
+              L&apos;analyse de {analyse.match.domicile.nom} - {analyse.match.exterieur.nom} a
+              échoué : {analyse.message_erreur ?? "erreur inconnue"}. Relancez-la depuis l&apos;accueil.
+            </p>
+          )}
         </div>
       </div>
     </main>

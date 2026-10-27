@@ -29,6 +29,8 @@ API-Football         IA (Groq)            Supabase (table analyses)
 | `src/lib/supabase/admin.ts` | Client administrateur (clé secrète, RLS ignorée) : contrôles de `/admin` uniquement |
 | `src/lib/supabase/proxy.ts` + `src/proxy.ts` | Rafraîchit la session à chaque requête, redirige vers `/connexion` |
 | `src/lib/admin.ts` | `estAdministrateur` (liste `ADMIN_EMAILS`) |
+| `src/lib/qstash.ts` | Client QStash et `publierGeneration` (message `{ analyseId }`, 3 nouvelles tentatives) |
+| `src/app/api/jobs/generer-analyse/route.ts` | Worker : statistiques, forme, IA, statut `prete` ou `erreur` (client administrateur) |
 | `src/lib/limitation.ts` | Client Upstash Redis et limiteur `limiteurAnalyses` (5 par heure, fenêtre glissante) |
 | `src/app/connexion/`, `src/app/auth/callback/` | Lien magique : formulaire, puis échange du code contre une session |
 | `src/components/EnTete.tsx` | Adresse de l'utilisateur et bouton de déconnexion |
@@ -39,7 +41,7 @@ API-Football         IA (Groq)            Supabase (table analyses)
 | `src/components/AffichageAnalyse.tsx` | Texte de l'analyse (affichage) |
 | `src/app/analyses/` | Liste et détail des analyses enregistrées |
 | `src/lib/statut.ts` | Moteur des contrôles de santé (délai max, seuil « dégradé ») |
-| `src/lib/controles.ts` | Contrôles de Vercel, de l'IA, d'API-Football, de Supabase Database et Auth, d'Upstash Redis (`server-only`) |
+| `src/lib/controles.ts` | Contrôles de Vercel, de l'IA, d'API-Football, de Supabase Database et Auth, d'Upstash Redis et QStash (`server-only`) |
 | `src/app/api/admin/statut/route.ts` | Lance les contrôles en parallèle, statut global = le pire |
 | `src/app/admin/page.tsx` | Vérifie l'administrateur (composant serveur), 404 sinon |
 | `src/components/TableauStatut.tsx` | Tableau de bord des services (composant client) |
@@ -52,6 +54,9 @@ API-Football         IA (Groq)            Supabase (table analyses)
 - **Pages Supabase** : `await connection()` remplace `force-dynamic` (incompatible avec `cacheComponents`) ; `loading.tsx` sert de limite `<Suspense>`.
 - **Quota IA** : un match déjà analysé par l'utilisateur est relu dans Supabase au lieu de rappeler l'IA.
 - **Authentification / autorisation** : Supabase Auth dit qui est l'utilisateur ; la Row Level Security (`supabase/authentification.sql`) filtre les analyses par `user_id`. `user_id` vaut `auth.uid()` par défaut : la route n'envoie jamais l'auteur. Contrainte `unique (user_id, match_id)` : un même match peut être analysé par plusieurs utilisateurs.
+- **Génération asynchrone** : `POST /api/analyses` (producteur) enregistre l'analyse `en_attente`, publie un message QStash et répond 202. QStash appelle le worker (consommateur) ; le front interroge `GET /api/analyses/[id]` toutes les 2 s (polling). Le message ne contient que l'identifiant : le worker relit la base.
+- **Worker** : signature QStash vérifiée (`verifySignatureAppRouter`), idempotent (ne traite qu'une analyse encore `en_attente`), client administrateur (pas de session). Erreur passagère (IA 429/5xx, API-Football 429/503, réseau) : code 500, QStash réessaie. Erreur définitive ou dernière tentative : statut `erreur` et code 200.
+- **Relance** : avec `unique (user_id, match_id)`, une analyse en échec est remise `en_attente` (client administrateur, la RLS n'autorise pas l'utilisateur à modifier ses analyses) puis republiée.
 - **Limitation de débit** : 5 nouvelles analyses par heure et par utilisateur (identifiant Supabase, pas l'IP). Le quota est vérifié après la relecture d'une analyse déjà enregistrée (gratuite) et avant API-Football et l'IA (coûteux). Si Redis est indisponible, la requête passe (« fail open ») et l'incident est journalisé.
 - **Clé secrète** : le client administrateur ignore la RLS ; il n'est utilisé que pour les contrôles de `/admin`, jamais pour une requête faite au nom d'un utilisateur.
 - **Session et cacheComponents** : tout ce qui lit le cookie est dans une limite `<Suspense>` (`EnTete` dans le layout, `loading.tsx` dans `/connexion`, `/admin`, `/analyses`).

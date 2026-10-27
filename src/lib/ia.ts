@@ -105,3 +105,20 @@ export async function appelerModele(
   }
   return contenu;
 }
+
+export function messageErreurIA(erreur: unknown): string {
+  if (erreur instanceof ErreurIA && erreur.status === 429) {
+    return "Le service d'IA est momentanément saturé.";
+  }
+
+  if (erreur instanceof ErreurIA && erreur.status === 413) {
+    return "Les données du match sont trop volumineuses pour le service d'IA.";
+  }
+
+  // appelerModele transforme un délai dépassé en ErreurIA 504
+  if (erreur instanceof ErreurIA && erreur.status === 504) {
+    return "Le service d'IA a mis trop de temps à répondre.";
+  }
+
+  return "La génération de l'analyse a échoué.";
+}
