@@ -38,7 +38,7 @@ Le navigateur ne parle qu'au back de l'application (Route Handlers Next.js), qui
 
 Comme la génération se fait ailleurs, le navigateur doit savoir quand elle est terminée. Plutôt que d'interroger le serveur toutes les deux secondes, il s'abonne avec **Supabase Realtime** aux modifications de son analyse, et la RLS garantit qu'il ne reçoit que les siennes. Juste après l'abonnement, il relit une fois l'état de l'analyse : elle a pu se terminer avant. Le canal est toujours fermé à la fin.
 
-La page `/admin`, réservée aux adresses de `ADMIN_EMAILS` (404 pour les autres), contrôle en parallèle les 8 services : Vercel, le modèle d'IA, football-data.org, Supabase Database, Supabase Auth, Upstash Redis, Upstash QStash et Supabase Realtime. Aucun contrôle ne consomme de quota.
+La page `/admin`, réservée aux adresses de `ADMIN_EMAILS` (404 pour les autres), contrôle en parallèle les 8 services : Vercel, le modèle d'IA, football-data.org, Supabase Database, Supabase Auth, Upstash Redis, Upstash QStash et Supabase Realtime. Aucun contrôle ne consomme de tokens d'IA ni de quota d'analyses (celui de football-data.org compte pour une requête sur les 10 autorisées par minute).
 
 ## Modèle d'IA
 
@@ -80,7 +80,7 @@ Toute requête faite au nom d'un utilisateur passe par le client serveur, avec s
 
 ## Lancer le projet en local
 
-**Prérequis** : Node.js 20 ou plus, et des comptes gratuits Supabase, Groq, football-data.org et Upstash.
+**Prérequis** : Node.js 22.17 ou plus, et des comptes gratuits Supabase, Groq, football-data.org et Upstash.
 
 ```bash
 npm install
@@ -91,7 +91,7 @@ Remplir `.env.local` :
 
 | Variable | Valeur |
 | --- | --- |
-| `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | Groq : `https://api.groq.com/openai/v1`, une clé d'API, `openai/gpt-oss-20b` |
+| `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | Groq : `https://api.groq.com/openai/v1`, une clé d'API, `openai/gpt-oss-20b` (sans `AI_BASE_URL` ni `AI_MODEL`, ce sont les valeurs par défaut) |
 | `FOOTBALL_DATA_KEY` | Clé reçue par e-mail à l'inscription sur football-data.org |
 | `NEXT_PUBLIC_SUPABASE_URL` | Adresse racine du projet Supabase (sans `/rest/v1`) |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Clé publiable Supabase (`sb_publishable_…`) |

@@ -8,6 +8,12 @@ import { creerClientNavigateur } from "@/lib/supabase/client";
 
 const DELAI_MAX_MS = 90000;
 
+// Message à afficher : celui du serveur, sinon un message de repli (jamais un détail technique)
+function messageErreur(error: unknown, repli: string): string {
+  if (error instanceof TypeError) return "Impossible de contacter le serveur. Vérifiez votre connexion.";
+  return error instanceof Error && error.message ? error.message : repli;
+}
+
 // S'abonne aux changements de l'analyse et attend qu'elle soit prête ou en erreur
 async function attendreAnalyse(id: string): Promise<AnalyseEnregistree> {
   const supabase = creerClientNavigateur();
@@ -54,8 +60,12 @@ async function attendreAnalyse(id: string): Promise<AnalyseEnregistree> {
     // Relit l'analyse complète : la ligne reçue en temps réel ne contient pas
     // les points clés, rangés dans une autre table
     async function relire() {
-      const reponse = await fetch(`/api/analyses/${id}`, { cache: "no-store" });
-      if (reponse.ok) examiner(await reponse.json());
+      try {
+        const reponse = await fetch(`/api/analyses/${id}`, { cache: "no-store" });
+        if (reponse.ok) examiner(await reponse.json());
+      } catch {
+        // Panne réseau passagère : le délai maximal finira par afficher un message
+      }
     }
 
     canal
@@ -98,11 +108,11 @@ export default function ExplorateurMatchs() {
   useEffect(() => {
     fetch("/api/saisons")
       .then(async (reponse) => {
-        const donnees = await reponse.json();
+        const donnees = await reponse.json().catch(() => ({}));
         if (!reponse.ok) throw new Error(donnees.erreur);
         setSaisons(donnees.saisons);
       })
-      .catch((error: Error) => setErreur(error.message || "Impossible de charger les saisons."));
+      .catch((error) => setErreur(messageErreur(error, "Impossible de charger les saisons.")));
   }, []);
 
   // 2. Choix d'une saison : tous ses matchs terminés
@@ -117,11 +127,11 @@ export default function ExplorateurMatchs() {
 
     try {
       const reponse = await fetch(`/api/matchs?saison=${annee}`);
-      const donnees = await reponse.json();
+      const donnees = await reponse.json().catch(() => ({}));
       if (!reponse.ok) throw new Error(donnees.erreur);
       setMatchs(donnees.matchs);
     } catch (error) {
-      setErreur(error instanceof Error ? error.message : "Impossible de charger les matchs.");
+      setErreur(messageErreur(error, "Impossible de charger les matchs."));
     } finally {
       setChargement("");
     }
@@ -140,7 +150,7 @@ export default function ExplorateurMatchs() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ saison, match: match.id }),
       });
-      const donnees = await reponse.json();
+      const donnees = await reponse.json().catch(() => ({}));
       const entete = reponse.headers.get("X-RateLimit-Remaining");
       if (entete !== null) setRestantes(Number(entete));
       if (!reponse.ok) throw new Error(donnees.erreur);
@@ -154,7 +164,7 @@ export default function ExplorateurMatchs() {
       // Demande acceptée (202) ou déjà en cours : on attend le worker
       setResultat(await attendreAnalyse(donnees.id));
     } catch (error) {
-      setErreur(error instanceof Error ? error.message : "L'analyse a échoué.");
+      setErreur(messageErreur(error, "L'analyse a échoué. Réessayez plus tard."));
     } finally {
       setChargement("");
     }

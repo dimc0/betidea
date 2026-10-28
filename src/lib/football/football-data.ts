@@ -35,7 +35,8 @@ async function appelerFootballData(
 ): Promise<Resultat> {
   const apiKey = process.env.FOOTBALL_DATA_KEY;
   if (!apiKey) {
-    return { ok: false, erreur: "La variable serveur FOOTBALL_DATA_KEY n'est pas configurée.", status: 500 };
+    console.error("La variable serveur FOOTBALL_DATA_KEY n'est pas configurée.");
+    return { ok: false, erreur: "Les données football sont momentanément indisponibles. Réessayez plus tard.", status: 500 };
   }
 
   const url = new URL(`/v4${chemin}`, "https://api.football-data.org");
@@ -51,8 +52,9 @@ async function appelerFootballData(
     const donnees: unknown = await reponse.json().catch(() => null);
 
     if (!reponse.ok) {
-      const erreurApi = lireErreurApi(reponse.status, donnees);
-      console.error(`Erreur football-data.org ${chemin} : ${erreurApi.message}`);
+      const erreurApi = lireErreurApi(reponse.status);
+      const detail = estObjet(donnees) && typeof donnees.message === "string" ? donnees.message : "";
+      console.error(`Erreur football-data.org ${chemin} (HTTP ${reponse.status}) : ${detail}`);
       return { ok: false, erreur: erreurApi.message, status: erreurApi.status };
     }
 

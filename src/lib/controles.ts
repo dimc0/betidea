@@ -21,7 +21,7 @@ const controleIA: Controle = {
   verifier: async () => {
     // Mêmes valeurs par défaut que src/lib/ia.ts, pour contrôler ce que l'application utilise vraiment.
     const baseUrl = (process.env.AI_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/$/, "");
-    const apiKey = process.env.AI_API_KEY || process.env.GROQ_API_KEY;
+    const apiKey = process.env.AI_API_KEY;
     const model = process.env.AI_MODEL || "openai/gpt-oss-20b";
 
     if (!apiKey) {
