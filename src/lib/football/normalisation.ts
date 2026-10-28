@@ -7,13 +7,9 @@ export function estObjet(valeur: unknown): valeur is Record<string, unknown> {
 }
 
 // football-data.org utilise les codes HTTP : 400 clé invalide, 403 ressource hors de l'offre,
-// 429 trop de requêtes. Le corps contient { message, errorCode }.
-export function lireErreurApi(status: number, corps: unknown): { message: string; status: number } {
-  const message = estObjet(corps) && typeof corps.message === "string" ? corps.message : "";
-
-  if (status === 400 || status === 401) {
-    return { status: 502, message: "La clé FOOTBALL_DATA_KEY est absente ou refusée par football-data.org." };
-  }
+// 429 trop de requêtes. Seuls 403 et 429 ont un message utile à l'utilisateur ;
+// les autres cas reçoivent un message neutre (le détail est dans les journaux du serveur).
+export function lireErreurApi(status: number): { message: string; status: number } {
   if (status === 403) {
     return {
       status: 403,
@@ -23,7 +19,7 @@ export function lireErreurApi(status: number, corps: unknown): { message: string
   if (status === 429) {
     return { status: 429, message: "Trop de requêtes vers football-data.org (10 par minute). Réessaie dans une minute." };
   }
-  return { status: 502, message: `football-data.org a refusé la requête (HTTP ${status}) ${message}`.trim() };
+  return { status: 502, message: "Les données football sont momentanément indisponibles. Réessayez plus tard." };
 }
 
 // Réponse de /competitions/{code} : les `nombreMax` saisons terminées les plus récentes,

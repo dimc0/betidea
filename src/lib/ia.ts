@@ -1,3 +1,5 @@
+import "server-only";
+
 type Message = {
   role: "system" | "user" | "assistant";
   content: string;
@@ -26,7 +28,7 @@ export async function appelerModele(
     maxCompletionTokens?: number;
   } = {}
 ): Promise<string> {
-  const apiKey = process.env.AI_API_KEY || process.env.GROQ_API_KEY;
+  const apiKey = process.env.AI_API_KEY;
   const model = process.env.AI_MODEL || "openai/gpt-oss-20b";
   const baseUrl = (process.env.AI_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/$/, "");
 
