@@ -16,7 +16,7 @@ export default function DetailMatch({ resultat }: { resultat: AnalyseEnregistree
         {match.domicile.nom} {match.butsDomicile} - {match.butsExterieur} {match.exterieur.nom}
       </h2>
 
-      {statistiques.length > 0 ? (
+      {statistiques.length > 0 && (
         <table className="mt-4 w-full text-sm">
           <tbody>
             {statistiques.map((statistique) => (
@@ -28,10 +28,6 @@ export default function DetailMatch({ resultat }: { resultat: AnalyseEnregistree
             ))}
           </tbody>
         </table>
-      ) : (
-        <p className="mt-4 text-sm text-slate-400">
-          football-data.org ne fournit pas de statistiques pour ce match.
-        </p>
       )}
 
       <AffichageAnalyse analyse={analyse} points={points_cles} />
