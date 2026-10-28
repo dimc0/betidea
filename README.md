@@ -17,7 +17,7 @@ Parcours :
 
 https://betidea-cyan.vercel.app
 
-Vidéo de démonstration : _lien à ajouter_
+Vidéo de démonstration (54 s, sans son) : [captures/demo.mp4](https://github.com/dimc0/betidea/blob/main/captures/demo.mp4)
 
 ## Architecture
 
