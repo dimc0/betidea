@@ -1,3 +1,4 @@
+import type { Match } from "@/lib/affiche";
 import { ErreurFootball, recupererMatchs } from "@/lib/football/football-data";
 import { limiteurAnalyses } from "@/lib/limitation";
 import { publierGeneration } from "@/lib/qstash";
@@ -42,7 +43,24 @@ export async function POST(request: Request) {
     return Response.json(existante);
   }
 
-  // 2. Vérification du quota de l'utilisateur, avant les ressources coûteuses (football-data.org et IA).
+  // 2. Nouvelle demande : le match doit exister dans cette saison (relu dans football-data.org,
+  // en cache). Une demande invalide est refusée sans consommer de quota ni rien enregistrer.
+  let match: Match | undefined;
+
+  if (!existante) {
+    try {
+      const matchs = await recupererMatchs(saison);
+      match = matchs.find((element) => element.id === matchId);
+    } catch (erreur) {
+      return reponseErreurFootball(erreur);
+    }
+
+    if (!match) {
+      return Response.json({ erreur: "Ce match est introuvable dans cette saison." }, { status: 404 });
+    }
+  }
+
+  // 3. Vérification du quota de l'utilisateur, avant les ressources coûteuses (football-data.org et IA).
   // Relire une analyse déjà enregistrée (étape 1) ne consomme pas de quota.
   const enTetesQuota: Record<string, string> = {};
 
@@ -69,7 +87,7 @@ export async function POST(request: Request) {
     console.error("Limitation de débit indisponible :", erreur);
   }
 
-  // 3. Enregistrement de la demande, avec le statut « en attente »
+  // 4. Enregistrement de la demande, avec le statut « en attente »
   let analyseId: string;
 
   if (existante) {
@@ -86,20 +104,6 @@ export async function POST(request: Request) {
     }
     analyseId = existante.id;
   } else {
-    // Le match est relu dans football-data.org (en cache) : une demande pour un match inexistant
-    // est refusée immédiatement, sans rien enregistrer.
-    let match;
-    try {
-      const matchs = await recupererMatchs(saison);
-      match = matchs.find((element) => element.id === matchId);
-    } catch (erreur) {
-      return reponseErreurFootball(erreur);
-    }
-
-    if (!match) {
-      return Response.json({ erreur: "Ce match est introuvable dans cette saison." }, { status: 404 });
-    }
-
     // user_id = auth.uid() par défaut, statut = « en_attente » par défaut
     const { data, error } = await supabase
       .from("analyses")
@@ -114,7 +118,7 @@ export async function POST(request: Request) {
     analyseId = data.id;
   }
 
-  // 4. Publication du message de génération dans la file
+  // 5. Publication du message de génération dans la file
   try {
     await publierGeneration(analyseId);
   } catch (erreur) {
@@ -132,7 +136,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // 5. Réponse immédiate : la demande est acceptée, le traitement suivra
+  // 6. Réponse immédiate : la demande est acceptée, le traitement suivra
   return Response.json(
     { id: analyseId, statut: "en_attente" },
     { status: 202, headers: enTetesQuota }
