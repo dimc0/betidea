@@ -38,13 +38,21 @@ export type Analyse = {
 
 export type StatutAnalyse = "en_attente" | "prete" | "erreur";
 
+// Une ligne de la table points_cles, liée à son analyse.
+export type PointCle = {
+  position: number;
+  texte: string;
+};
+
 // Ce qui est enregistré dans Supabase. Tant que le statut n'est pas « prete »,
 // les statistiques et l'analyse sont vides en base : toujours vérifier le statut avant de les afficher.
+// Les points clés sont rangés dans leur propre table (points_cles), pas dans la colonne « analyse ».
 export type AnalyseEnregistree = {
   id: string;
   match: Match;
   statistiques: Statistique[];
-  analyse: Analyse;
+  analyse: Omit<Analyse, "points_cles">;
+  points_cles: PointCle[];
   created_at: string;
   statut: StatutAnalyse;
   message_erreur: string | null;

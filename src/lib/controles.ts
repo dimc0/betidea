@@ -78,18 +78,19 @@ const controleFootballData: Controle = {
 
 const controleBase: Controle = {
   service: "Supabase Database",
-  description: "Base de données des analyses",
+  description: "Base de données des analyses et de leurs points clés",
   verifier: async () => {
     const supabase = creerClientAdmin();
-    const { count, error } = await supabase
-      .from("analyses")
-      .select("id", { count: "exact", head: true });
+    const [analyses, points] = await Promise.all([
+      supabase.from("analyses").select("id", { count: "exact", head: true }),
+      supabase.from("points_cles").select("id", { count: "exact", head: true }),
+    ]);
 
-    if (error) {
-      throw new Error(error.message);
+    if (analyses.error || points.error) {
+      throw new Error((analyses.error ?? points.error)!.message);
     }
 
-    return `${count ?? 0} analyse(s) enregistrée(s)`;
+    return `${analyses.count ?? 0} analyse(s) · ${points.count ?? 0} point(s) clé(s)`;
   },
 };
 

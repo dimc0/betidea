@@ -5,7 +5,7 @@ import { formaterDate } from "@/lib/football/metier";
 
 // Score, statistiques (données football-data.org) puis analyse de l'IA.
 export default function DetailMatch({ resultat }: { resultat: AnalyseEnregistree }) {
-  const { match, statistiques, analyse } = resultat;
+  const { match, statistiques, analyse, points_cles } = resultat;
 
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
@@ -34,7 +34,7 @@ export default function DetailMatch({ resultat }: { resultat: AnalyseEnregistree
         </p>
       )}
 
-      <AffichageAnalyse analyse={analyse} />
+      <AffichageAnalyse analyse={analyse} points={points_cles} />
 
       <Link href={`/analyses/${resultat.id}`} className="mt-3 inline-block text-sm text-emerald-300 underline">
         Retrouver cette analyse
