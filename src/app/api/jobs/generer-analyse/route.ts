@@ -35,9 +35,9 @@ async function traiter(request: Request) {
 
   const { data: demande } = await supabase
     .from("analyses")
-    .select("id, saison, match, statut")
+    .select("id, saison, match, statut, user_id")
     .eq("id", analyseId)
-    .maybeSingle<{ id: string; saison: number; match: Match; statut: string }>();
+    .maybeSingle<{ id: string; saison: number; match: Match; statut: string; user_id: string }>();
 
   // Idempotence : une analyse absente ou déjà traitée n'est pas générée une seconde fois
   if (!demande || demande.statut !== "en_attente") {
@@ -63,11 +63,30 @@ async function traiter(request: Request) {
       formeExterieur: formeAvantMatch(matchs, match, match.exterieur.id),
     });
 
+    // Les points clés vont dans leur propre table, le reste de l'analyse dans la colonne jsonb.
+    // Ils sont enregistrés AVANT le passage à « prete » : le front les relit dès qu'il voit ce statut.
+    const { points_cles, ...texteAnalyse } = analyse;
+
+    // Relance d'une analyse en échec : on efface d'éventuels points d'une tentative précédente
+    await supabase.from("points_cles").delete().eq("analyse_id", demande.id);
+
+    if (points_cles.length > 0) {
+      const { error } = await supabase.from("points_cles").insert(
+        points_cles.map((texte, index) => ({
+          analyse_id: demande.id,
+          user_id: demande.user_id, // le worker n'a pas de session : l'auteur est celui de l'analyse
+          position: index + 1,
+          texte,
+        }))
+      );
+      if (error) throw new Error(`Enregistrement des points clés impossible : ${error.message}`);
+    }
+
     await supabase
       .from("analyses")
       .update({
         statistiques,
-        analyse,
+        analyse: texteAnalyse,
         modele: process.env.AI_MODEL || "openai/gpt-oss-20b",
         statut: "prete",
       })

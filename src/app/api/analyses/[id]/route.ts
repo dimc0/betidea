@@ -21,9 +21,10 @@ export async function GET(
   }
 
   // Row Level Security : un utilisateur ne peut consulter que l'état de ses propres analyses
+  // (et de leurs points clés, lus par jointure grâce à la clé étrangère analyse_id)
   const { data: analyse, error } = await supabase
     .from("analyses")
-    .select("id, match, statistiques, analyse, created_at, statut, message_erreur")
+    .select("id, match, statistiques, analyse, created_at, statut, message_erreur, points_cles(position, texte)")
     .eq("id", id)
     .maybeSingle();
 

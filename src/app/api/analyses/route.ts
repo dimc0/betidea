@@ -5,7 +5,9 @@ import { publierGeneration } from "@/lib/qstash";
 import { creerClientAdmin } from "@/lib/supabase/admin";
 import { creerClientServeur } from "@/lib/supabase/server";
 
-const COLONNES = "id, match, statistiques, analyse, created_at, statut, message_erreur";
+// points_cles(...) : jointure sur la seconde table, grâce à la clé étrangère analyse_id
+const COLONNES =
+  "id, match, statistiques, analyse, created_at, statut, message_erreur, points_cles(position, texte)";
 
 // Demande d'analyse d'un match : { saison: 2023, match: 1234 }
 export async function POST(request: Request) {

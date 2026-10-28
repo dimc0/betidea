@@ -52,18 +52,24 @@ async function attendreAnalyse(id: string): Promise<AnalyseEnregistree> {
       DELAI_MAX_MS
     );
 
+    // Relit l'analyse complète : la ligne reçue en temps réel ne contient pas
+    // les points clés, rangés dans une autre table
+    async function relire() {
+      const reponse = await fetch(`/api/analyses/${id}`, { cache: "no-store" });
+      if (reponse.ok) examiner(await reponse.json());
+    }
+
     canal
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "analyses", filter: `id=eq.${id}` },
-        (evenement) => examiner(evenement.new as AnalyseEnregistree)
-      )
-      .subscribe(async (statut) => {
-        if (statut === "SUBSCRIBED") {
-          // L'analyse a pu se terminer avant l'abonnement : on vérifie une fois l'état actuel
-          const reponse = await fetch(`/api/analyses/${id}`, { cache: "no-store" });
-          if (reponse.ok) examiner(await reponse.json());
+        (evenement) => {
+          if ((evenement.new as AnalyseEnregistree).statut !== "en_attente") relire();
         }
+      )
+      .subscribe((statut) => {
+        // L'analyse a pu se terminer avant l'abonnement : on vérifie une fois l'état actuel
+        if (statut === "SUBSCRIBED") relire();
 
         if (statut === "CHANNEL_ERROR" || statut === "TIMED_OUT") {
           terminer(() =>

@@ -18,7 +18,7 @@ export default async function DetailAnalyse({
   const supabase = await creerClientServeur();
   const { data: analyse } = await supabase
     .from("analyses")
-    .select("id, match, statistiques, analyse, created_at, statut, message_erreur")
+    .select("id, match, statistiques, analyse, created_at, statut, message_erreur, points_cles(position, texte)")
     .eq("id", id)
     .maybeSingle<AnalyseEnregistree>();
 
