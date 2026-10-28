@@ -1,7 +1,7 @@
 import { connection } from "next/server";
-import { COMPETITION, ErreurFootball, recupererSaisons } from "@/lib/football/api-football";
+import { COMPETITION, ErreurFootball, recupererSaisons } from "@/lib/football/football-data";
 
-// Saisons terminées de la compétition, lues dans API-Football.
+// Saisons terminées de la compétition, lues dans football-data.org.
 export async function GET() {
   // Exécution à chaque requête, jamais au build (hors du try : Next.js s'en sert).
   await connection();

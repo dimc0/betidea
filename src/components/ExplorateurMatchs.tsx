@@ -4,29 +4,78 @@ import { useEffect, useState } from "react";
 import DetailMatch from "@/components/DetailMatch";
 import type { AnalyseEnregistree, Match, Saison } from "@/lib/affiche";
 import { formaterDate, listerEquipes, matchsDeLEquipe } from "@/lib/football/metier";
+import { creerClientNavigateur } from "@/lib/supabase/client";
 
-const INTERVALLE_MS = 2000;
-const VERIFICATIONS_MAX = 45;
+const DELAI_MAX_MS = 90000;
 const ETAPE_ARRIERE_PLAN = "Analyse en arrière-plan…";
 
-// Interroge régulièrement le back jusqu'à ce que l'analyse soit prête ou en erreur
+// S'abonne aux changements de l'analyse et attend qu'elle soit prête ou en erreur
 async function attendreAnalyse(id: string): Promise<AnalyseEnregistree> {
-  for (let i = 0; i < VERIFICATIONS_MAX; i++) {
-    await new Promise((resolve) => setTimeout(resolve, INTERVALLE_MS));
+  const supabase = creerClientNavigateur();
 
-    const reponse = await fetch(`/api/analyses/${id}`, { cache: "no-store" });
-    if (!reponse.ok) continue;
+  // Charge la session : l'abonnement doit être fait au nom de l'utilisateur,
+  // pour que la Row Level Security autorise la réception des événements
+  await supabase.auth.getSession();
 
-    const analyse: AnalyseEnregistree = await reponse.json();
-    if (analyse.statut === "prete") return analyse;
-    if (analyse.statut === "erreur") {
-      throw new Error(analyse.message_erreur ?? "La génération de l'analyse a échoué.");
+  return new Promise((resolve, reject) => {
+    const canal = supabase.channel(`analyse-${id}`);
+    let termine = false;
+
+    function terminer(action: () => void) {
+      if (termine) return;
+      termine = true;
+      clearTimeout(minuteur);
+      supabase.removeChannel(canal);
+      action();
     }
-  }
 
-  throw new Error(
-    "L'analyse prend plus de temps que prévu. Elle apparaîtra dans « Mes analyses » dès qu'elle sera prête."
-  );
+    function examiner(analyse: AnalyseEnregistree) {
+      if (analyse.statut === "prete") {
+        terminer(() => resolve(analyse));
+      } else if (analyse.statut === "erreur") {
+        terminer(() =>
+          reject(new Error(analyse.message_erreur ?? "La génération de l'analyse a échoué."))
+        );
+      }
+    }
+
+    // Délai maximal : sans réponse au bout de 90 s, on arrête d'attendre
+    const minuteur = setTimeout(
+      () =>
+        terminer(() =>
+          reject(
+            new Error(
+              "L'analyse prend plus de temps que prévu. Elle apparaîtra dans « Mes analyses » dès qu'elle sera prête."
+            )
+          )
+        ),
+      DELAI_MAX_MS
+    );
+
+    canal
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "analyses", filter: `id=eq.${id}` },
+        (evenement) => examiner(evenement.new as AnalyseEnregistree)
+      )
+      .subscribe(async (statut) => {
+        if (statut === "SUBSCRIBED") {
+          // L'analyse a pu se terminer avant l'abonnement : on vérifie une fois l'état actuel
+          const reponse = await fetch(`/api/analyses/${id}`, { cache: "no-store" });
+          if (reponse.ok) examiner(await reponse.json());
+        }
+
+        if (statut === "CHANNEL_ERROR" || statut === "TIMED_OUT") {
+          terminer(() =>
+            reject(
+              new Error(
+                "La connexion en temps réel a échoué. L'analyse apparaîtra dans « Mes analyses » dès qu'elle sera prête."
+              )
+            )
+          );
+        }
+      });
+  });
 }
 
 export default function ExplorateurMatchs() {

@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { ErreurFootball, recupererMatchs } from "@/lib/football/api-football";
+import { ErreurFootball, recupererMatchs } from "@/lib/football/football-data";
 
 // Matchs terminés d'une saison passée : /api/matchs?saison=2023
 export async function GET(request: NextRequest) {

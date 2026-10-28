@@ -17,7 +17,7 @@ export default function Home() {
           <h1 className="mt-2 text-3xl font-bold">Analyse des matchs des saisons passées</h1>
           <p className="mt-2 text-slate-400">
             Choisis une saison, une équipe, puis clique sur un match : l&apos;IA l&apos;analyse à partir
-            des données d&apos;API-Football.
+            des données de football-data.org.
           </p>
         </header>
 

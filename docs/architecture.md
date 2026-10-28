@@ -9,7 +9,7 @@ Navigateur (ExplorateurMatchs, composant client)
 Route Handlers : /api/saisons, /api/matchs, /api/analyses
    │                     │                    │
    ▼                     ▼                    ▼
-API-Football         IA (Groq)            Supabase (table analyses)
+football-data.org    IA (Groq)            Supabase (table analyses)
                                               ▲
                      Pages serveur /analyses ─┘
 ```
@@ -19,9 +19,9 @@ API-Football         IA (Groq)            Supabase (table analyses)
 | Fichier | Rôle |
 | --- | --- |
 | `src/lib/affiche.ts` | Types partagés (Saison, Equipe, Match, Statistique, Analyse) |
-| `src/lib/football/normalisation.ts` | Réponses API-Football → types Betidea (pur) |
+| `src/lib/football/normalisation.ts` | Réponses football-data.org → types Betidea (pur) |
 | `src/lib/football/metier.ts` | Équipes de la saison, matchs d'une équipe, forme avant un match (pur) |
-| `src/lib/football/api-football.ts` | Appels à API-Football + cache (`server-only`) |
+| `src/lib/football/football-data.ts` | Appels à football-data.org + cache (`server-only`) |
 | `src/lib/ia.ts` | Client du modèle d'IA |
 | `src/lib/generer-analyse.ts` | Consigne, schéma JSON, validation, nouvelle tentative |
 | `src/lib/supabase/client.ts` | Client navigateur (clé publiable) : connexion, déconnexion |
@@ -41,22 +41,23 @@ API-Football         IA (Groq)            Supabase (table analyses)
 | `src/components/AffichageAnalyse.tsx` | Texte de l'analyse (affichage) |
 | `src/app/analyses/` | Liste et détail des analyses enregistrées |
 | `src/lib/statut.ts` | Moteur des contrôles de santé (délai max, seuil « dégradé ») |
-| `src/lib/controles.ts` | Contrôles de Vercel, de l'IA, d'API-Football, de Supabase Database et Auth, d'Upstash Redis et QStash (`server-only`) |
+| `src/lib/controles.ts` | Contrôles de Vercel, de l'IA, de football-data.org, de Supabase Database et Auth, d'Upstash Redis et QStash, de Supabase Realtime (`server-only`) |
 | `src/app/api/admin/statut/route.ts` | Lance les contrôles en parallèle, statut global = le pire |
 | `src/app/admin/page.tsx` | Vérifie l'administrateur (composant serveur), 404 sinon |
 | `src/components/TableauStatut.tsx` | Tableau de bord des services (composant client) |
 
 ## Points à savoir expliquer
 
-- **Faits / IA** : score et statistiques viennent d'API-Football et sont affichés tels quels ; l'IA ne rédige que le texte (titre, résumé, points clés, limites).
+- **Faits / IA** : score et score à la mi-temps viennent de football-data.org et sont affichés tels quels ; l'IA ne rédige que le texte (titre, résumé, points clés, limites).
 - **Passé / futur** : la « forme » envoyée à l'IA ne contient que les matchs joués avant le match analysé (`formeAvantMatch`).
 - **Cache** : une fonction `"use cache"` ne lève pas d'erreur (Next.js en masquerait le message en production) ; elle renvoie `{ ok, ... }` et l'erreur est levée en dehors.
 - **Pages Supabase** : `await connection()` remplace `force-dynamic` (incompatible avec `cacheComponents`) ; `loading.tsx` sert de limite `<Suspense>`.
 - **Quota IA** : un match déjà analysé par l'utilisateur est relu dans Supabase au lieu de rappeler l'IA.
 - **Authentification / autorisation** : Supabase Auth dit qui est l'utilisateur ; la Row Level Security (`supabase/authentification.sql`) filtre les analyses par `user_id`. `user_id` vaut `auth.uid()` par défaut : la route n'envoie jamais l'auteur. Contrainte `unique (user_id, match_id)` : un même match peut être analysé par plusieurs utilisateurs.
-- **Génération asynchrone** : `POST /api/analyses` (producteur) enregistre l'analyse `en_attente`, publie un message QStash et répond 202. QStash appelle le worker (consommateur) ; le front interroge `GET /api/analyses/[id]` toutes les 2 s (polling). Le message ne contient que l'identifiant : le worker relit la base.
-- **Worker** : signature QStash vérifiée (`verifySignatureAppRouter`), idempotent (ne traite qu'une analyse encore `en_attente`), client administrateur (pas de session). Erreur passagère (IA 429/5xx, API-Football 429/503, réseau) : code 500, QStash réessaie. Erreur définitive ou dernière tentative : statut `erreur` et code 200.
+- **Génération asynchrone** : `POST /api/analyses` (producteur) enregistre l'analyse `en_attente`, publie un message QStash et répond 202. QStash appelle le worker (consommateur) ; le front est prévenu par Supabase Realtime (partie 6, voir ci-dessous). Le message ne contient que l'identifiant : le worker relit la base.
+- **Temps réel** : `ExplorateurMatchs` s'abonne (WebSocket, Supabase Realtime) aux `UPDATE` de son analyse (`filter: id=eq.…`). La table `analyses` est dans la publication `supabase_realtime` (`supabase/temps-reel.sql`) ; la RLS s'applique aussi aux événements. Juste après `SUBSCRIBED`, une lecture de `GET /api/analyses/[id]` évite la condition de concurrence (analyse terminée avant l'abonnement). Le canal est toujours fermé (`removeChannel`), délai maximal 90 s.
+- **Worker** : signature QStash vérifiée (`verifySignatureAppRouter`), idempotent (ne traite qu'une analyse encore `en_attente`), client administrateur (pas de session). Erreur passagère (IA 429/5xx, football-data.org 429/503, réseau) : code 500, QStash réessaie. Erreur définitive ou dernière tentative : statut `erreur` et code 200.
 - **Relance** : avec `unique (user_id, match_id)`, une analyse en échec est remise `en_attente` (client administrateur, la RLS n'autorise pas l'utilisateur à modifier ses analyses) puis republiée.
-- **Limitation de débit** : 5 nouvelles analyses par heure et par utilisateur (identifiant Supabase, pas l'IP). Le quota est vérifié après la relecture d'une analyse déjà enregistrée (gratuite) et avant API-Football et l'IA (coûteux). Si Redis est indisponible, la requête passe (« fail open ») et l'incident est journalisé.
+- **Limitation de débit** : 5 nouvelles analyses par heure et par utilisateur (identifiant Supabase, pas l'IP). Le quota est vérifié après la relecture d'une analyse déjà enregistrée (gratuite) et avant football-data.org et l'IA (coûteux). Si Redis est indisponible, la requête passe (« fail open ») et l'incident est journalisé.
 - **Clé secrète** : le client administrateur ignore la RLS ; il n'est utilisé que pour les contrôles de `/admin`, jamais pour une requête faite au nom d'un utilisateur.
 - **Session et cacheComponents** : tout ce qui lit le cookie est dans une limite `<Suspense>` (`EnTete` dans le layout, `loading.tsx` dans `/connexion`, `/admin`, `/analyses`).

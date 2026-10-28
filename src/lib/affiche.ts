@@ -1,5 +1,5 @@
 // Types partagés de Betidea (front et back).
-// Toutes les données de match viennent d'API-Football, saisons passées uniquement.
+// Toutes les données de match viennent de football-data.org, saisons passées uniquement.
 
 export type Saison = {
   annee: number;

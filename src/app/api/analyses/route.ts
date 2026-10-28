@@ -1,4 +1,4 @@
-import { ErreurFootball, recupererMatchs } from "@/lib/football/api-football";
+import { ErreurFootball, recupererMatchs } from "@/lib/football/football-data";
 import { limiteurAnalyses } from "@/lib/limitation";
 import { publierGeneration } from "@/lib/qstash";
 import { creerClientAdmin } from "@/lib/supabase/admin";
@@ -8,7 +8,7 @@ const COLONNES = "id, match, statistiques, analyse, created_at, statut, message_
 
 // Demande d'analyse d'un match : { saison: 2023, match: 1234 }
 export async function POST(request: Request) {
-  // 0. Vérification de la session : rien n'est fait (ni quota API-Football, ni IA) pour un visiteur
+  // 0. Vérification de la session : rien n'est fait (ni requête football-data.org, ni IA) pour un visiteur
   const supabase = await creerClientServeur();
   const {
     data: { user },
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     return Response.json(existante);
   }
 
-  // 2. Vérification du quota de l'utilisateur, avant les ressources coûteuses (API-Football et IA).
+  // 2. Vérification du quota de l'utilisateur, avant les ressources coûteuses (football-data.org et IA).
   // Relire une analyse déjà enregistrée (étape 1) ne consomme pas de quota.
   const enTetesQuota: Record<string, string> = {};
 
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     }
     analyseId = existante.id;
   } else {
-    // Le match est relu dans API-Football (en cache) : une demande pour un match inexistant
+    // Le match est relu dans football-data.org (en cache) : une demande pour un match inexistant
     // est refusée immédiatement, sans rien enregistrer.
     let match;
     try {

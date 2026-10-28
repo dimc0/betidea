@@ -1,6 +1,6 @@
 import { verifySignatureAppRouter } from "@upstash/qstash/nextjs";
 import type { Match, Statistique } from "@/lib/affiche";
-import { ErreurFootball, recupererMatchs, recupererStatistiques } from "@/lib/football/api-football";
+import { ErreurFootball, recupererMatchs, recupererStatistiques } from "@/lib/football/football-data";
 import { formeAvantMatch } from "@/lib/football/metier";
 import { genererAnalyse } from "@/lib/generer-analyse";
 import { ErreurIA, messageErreurIA } from "@/lib/ia";
