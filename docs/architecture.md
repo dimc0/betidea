@@ -41,7 +41,7 @@ football-data.org    IA (Groq)            Supabase (table analyses)
 | `src/components/AffichageAnalyse.tsx` | Texte de l'analyse (affichage) |
 | `src/app/analyses/` | Liste et détail des analyses enregistrées |
 | `src/lib/statut.ts` | Moteur des contrôles de santé (délai max, seuil « dégradé ») |
-| `src/lib/controles.ts` | Contrôles de Vercel, de l'IA, de football-data.org, de Supabase Database et Auth, d'Upstash Redis et QStash (`server-only`) |
+| `src/lib/controles.ts` | Contrôles de Vercel, de l'IA, de football-data.org, de Supabase Database et Auth, d'Upstash Redis et QStash, de Supabase Realtime (`server-only`) |
 | `src/app/api/admin/statut/route.ts` | Lance les contrôles en parallèle, statut global = le pire |
 | `src/app/admin/page.tsx` | Vérifie l'administrateur (composant serveur), 404 sinon |
 | `src/components/TableauStatut.tsx` | Tableau de bord des services (composant client) |
@@ -54,7 +54,8 @@ football-data.org    IA (Groq)            Supabase (table analyses)
 - **Pages Supabase** : `await connection()` remplace `force-dynamic` (incompatible avec `cacheComponents`) ; `loading.tsx` sert de limite `<Suspense>`.
 - **Quota IA** : un match déjà analysé par l'utilisateur est relu dans Supabase au lieu de rappeler l'IA.
 - **Authentification / autorisation** : Supabase Auth dit qui est l'utilisateur ; la Row Level Security (`supabase/authentification.sql`) filtre les analyses par `user_id`. `user_id` vaut `auth.uid()` par défaut : la route n'envoie jamais l'auteur. Contrainte `unique (user_id, match_id)` : un même match peut être analysé par plusieurs utilisateurs.
-- **Génération asynchrone** : `POST /api/analyses` (producteur) enregistre l'analyse `en_attente`, publie un message QStash et répond 202. QStash appelle le worker (consommateur) ; le front interroge `GET /api/analyses/[id]` toutes les 2 s (polling). Le message ne contient que l'identifiant : le worker relit la base.
+- **Génération asynchrone** : `POST /api/analyses` (producteur) enregistre l'analyse `en_attente`, publie un message QStash et répond 202. QStash appelle le worker (consommateur) ; le front est prévenu par Supabase Realtime (partie 6, voir ci-dessous). Le message ne contient que l'identifiant : le worker relit la base.
+- **Temps réel** : `ExplorateurMatchs` s'abonne (WebSocket, Supabase Realtime) aux `UPDATE` de son analyse (`filter: id=eq.…`). La table `analyses` est dans la publication `supabase_realtime` (`supabase/temps-reel.sql`) ; la RLS s'applique aussi aux événements. Juste après `SUBSCRIBED`, une lecture de `GET /api/analyses/[id]` évite la condition de concurrence (analyse terminée avant l'abonnement). Le canal est toujours fermé (`removeChannel`), délai maximal 90 s.
 - **Worker** : signature QStash vérifiée (`verifySignatureAppRouter`), idempotent (ne traite qu'une analyse encore `en_attente`), client administrateur (pas de session). Erreur passagère (IA 429/5xx, football-data.org 429/503, réseau) : code 500, QStash réessaie. Erreur définitive ou dernière tentative : statut `erreur` et code 200.
 - **Relance** : avec `unique (user_id, match_id)`, une analyse en échec est remise `en_attente` (client administrateur, la RLS n'autorise pas l'utilisateur à modifier ses analyses) puis republiée.
 - **Limitation de débit** : 5 nouvelles analyses par heure et par utilisateur (identifiant Supabase, pas l'IP). Le quota est vérifié après la relecture d'une analyse déjà enregistrée (gratuite) et avant football-data.org et l'IA (coûteux). Si Redis est indisponible, la requête passe (« fail open ») et l'incident est journalisé.
